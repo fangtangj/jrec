@@ -43,7 +43,7 @@ public class UiHotkeyProbe extends Application {
         }
 
         after(5, () -> {
-            log("启动后绑定 = " + text(app, "hotkeySpec"));
+            log("启动后绑定 = " + text(app, "boundSpec"));
 
             Dialog<?> dialog = dialog();
             if (dialog == null) {
@@ -56,45 +56,85 @@ public class UiHotkeyProbe extends Application {
             after(1, () -> {
                 log("弹窗打开后快捷键是否释放 = " + (field(app, "hotkey", Object.class) == null));
 
-                // 1. Assign Ctrl+Shift+F10 by typing it into the recorder field.
+                // 1. Assign Ctrl+Alt+F10 by typing it into the recorder field.
+                //    Registration is asynchronous, so the wait is for the field to show
+                //    the new combination — not for a fixed number of seconds.
                 pressInField(KeyCode.F10, true, true, false);
-                log("输入 Ctrl+Shift+F10 后 字段 = " + text(app, "hotkeyField")
-                        + " | 状态 = " + text(app, "hotkeyStatus"));
-                log("实际绑定 = " + text(app, "hotkeySpec"));
+                awaitField("Ctrl+Alt+F10", () -> {
+                    log("输入 Ctrl+Alt+F10 后 字段 = " + text(app, "hotkeyField")
+                            + " | 状态 = " + text(app, "hotkeyStatus"));
+                    log("实际绑定 = " + text(app, "boundSpec"));
 
-                // 2. Try a combination this machine refuses (owned by another app).
-                pressInField(KeyCode.R, true, true, false);
-                log("输入 Ctrl+Alt+R 后 状态 = " + text(app, "hotkeyStatus")
-                        + " | 绑定仍是 = " + text(app, "hotkeySpec"));
+                    // 2. Try a combination this machine refuses (owned by another app).
+                    pressInField(KeyCode.R, true, true, false);
+                    awaitFieldSettled(() -> {
+                        log("输入 Ctrl+Alt+R 后 状态 = " + text(app, "hotkeyStatus")
+                                + " | 绑定仍是 = " + text(app, "boundSpec"));
 
-                after(1, () -> {
-                    dialog.close();
+                        dialog.close();
 
-                    after(2, () -> {
-                        log("关闭弹窗后 字段 = " + text(app, "hotkeyField")
-                                + " | 底部提示 = " + text(app, "keyHint"));
+                        after(2, () -> {
+                            log("关闭弹窗后 字段 = " + text(app, "hotkeyField")
+                                    + " | 底部提示 = " + text(app, "keyHint"));
 
-                        HotkeySpec bound = (HotkeySpec) field(app, "hotkeySpec", HotkeySpec.class);
-                        if (bound == null) {
-                            log("没有绑定，无法继续");
-                            Platform.exit();
-                            return;
-                        }
-                        boolean typed = typeCombo(bound);
-                        log("已发送 " + bound.label() + " = " + typed);
-
-                        after(3, () -> {
-                            log("按键后 录制中 = " + isRecording());
-                            typeCombo(bound);
-                            after(5, () -> {
-                                log("再按一次 录制中 = " + isRecording());
+                            HotkeySpec bound = (HotkeySpec) field(app, "boundSpec", HotkeySpec.class);
+                            if (bound == null) {
+                                log("没有绑定，无法继续");
                                 Platform.exit();
+                                return;
+                            }
+                            boolean typed = typeCombo(bound);
+                            log("已发送 " + bound.label() + " = " + typed);
+
+                            after(3, () -> {
+                                log("按键后 录制中 = " + isRecording());
+                                typeCombo(bound);
+                                after(5, () -> {
+                                    log("再按一次 录制中 = " + isRecording());
+                                    Platform.exit();
+                                });
                             });
                         });
                     });
                 });
             });
         });
+    }
+
+    /**
+     * Waits until the capture field shows the given combination.
+     * <p>
+     * Polling for the actual outcome instead of sleeping for a fixed time: the
+     * registration round trip is measured in seconds on a busy machine and in
+     * milliseconds on an idle one, and a fixed sleep is either flaky or slow.
+     * <p>
+     * The wait is on the <em>bound</em> combination, not on the field text. The field
+     * echoes the key press immediately, so waiting for it would return before the
+     * system has answered — and the probe would report a binding that had not happened.
+     */
+    private void awaitField(String expected, Runnable then) {
+        awaitUntil(() -> expected.equals(text(app, "boundSpec")), then, 10,
+                "绑定没有变成 " + expected);
+    }
+
+    /** Waits until the status line stops showing the "in effect" wording. */
+    private void awaitFieldSettled(Runnable then) {
+        awaitUntil(() -> !text(app, "hotkeyStatus").startsWith("当前生效"), then, 10,
+                "状态行没有变成失败提示");
+    }
+
+    private void awaitUntil(java.util.function.BooleanSupplier condition, Runnable then,
+                            int maxSeconds, String failureMessage) {
+        if (condition.getAsBoolean()) {
+            then.run();
+            return;
+        }
+        if (maxSeconds <= 0) {
+            log("等待超时：" + failureMessage);
+            then.run();
+            return;
+        }
+        after(1, () -> awaitUntil(condition, then, maxSeconds - 1, failureMessage));
     }
 
     private void pressInField(KeyCode code, boolean ctrl, boolean alt, boolean shift) {

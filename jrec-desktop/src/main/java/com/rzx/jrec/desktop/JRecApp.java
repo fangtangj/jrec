@@ -67,6 +67,7 @@ import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -97,6 +98,10 @@ public class JRecApp extends Application {
     private static final String PREFS_PET_SIZE = "petSize";
     private static final String PREFS_PET_OPACITY = "petOpacity";
     private static final String PREFS_PET_STAY = "petStayWhileRecording";
+
+    /** The pet can fade to 35% at most: below that it stops reading as a character. */
+    private static final double MIN_OPACITY = 35;
+    private static final double MAX_OPACITY = 100;
 
     private final Recorder recorder = new Recorder();
     private final Preferences prefs = Preferences.userNodeForPackage(JRecApp.class);
@@ -140,14 +145,25 @@ public class JRecApp extends Application {
     private GlobalHotkey hotkey;
     private TextField hotkeyField;
     private Label hotkeyStatus;
+    /** What the user explicitly chose and persisted. Null means "no explicit choice". */
     private HotkeySpec hotkeySpec;
+    /** What is registered with the system right now. May differ from {@link #hotkeySpec}. */
+    private HotkeySpec boundSpec;
     private boolean hotkeyBound;
+    /** Bumped for every registration attempt; a stale result is discarded. */
+    private int hotkeyGeneration;
+    /** The generation whose result was applied; equal to {@link #hotkeyGeneration} when idle. */
+    private int hotkeyAppliedGeneration;
+    /** True while the settings sheet is open and the shortcut must stay released. */
+    private boolean settingsOpen;
 
     private Label timerLabel;
     private Label recordingFileLabel;
     private Label recStopHint;
     private Label recordingCaption;
     private Label toast;
+    /** The transition that hides the toast; kept so a new toast can cancel the old one. */
+    private PauseTransition toastHide;
     private VBox historyBox;
     private Circle recDot;
     private Timeline wallClock;
@@ -157,6 +173,8 @@ public class JRecApp extends Application {
 
     private static final PseudoClass LIT = PseudoClass.getPseudoClass("lit");
     private long recordingStartedAt;
+    /** True between asking the recorder to start and it actually entering RECORDING. */
+    private boolean starting;
 
     private Rect region;
 
@@ -198,19 +216,59 @@ public class JRecApp extends Application {
         // hundred milliseconds. Doing that on the FX thread would stall the first
         // paint, so registration happens off-thread and only the result comes back.
         hotkeySpec = HotkeySpec.parse(prefs.get(PREFS_HOTKEY, ""));
-        new Thread(() -> {
-            GlobalHotkey created = Hotkeys.create();
-            boolean bound = created.register(hotkeySpec,
-                    () -> Platform.runLater(this::toggleRecording));
-            Platform.runLater(() -> adoptHotkey(created, bound));
-        }, "jrec-hotkey-init").start();
+        int generation = ++hotkeyGeneration;
+        startDaemon("jrec-hotkey-init", () -> {
+            GlobalHotkey created;
+            boolean bound;
+            try {
+                created = Hotkeys.create();
+                // Startup uses the fallback path: a combination that was free yesterday may
+                // be owned by another program today, and a recorder with no working shortcut
+                // is a recorder nobody uses.
+                bound = created.registerWithFallback(hotkeySpec,
+                        () -> Platform.runLater(this::toggleRecording));
+            } catch (Throwable t) {
+                hotkeyAppliedGeneration = generation;
+                Platform.runLater(() -> showHotkeyMessage("快捷键注册失败：" + t));
+                return;
+            }
+            Platform.runLater(() -> {
+                if (generation != hotkeyGeneration) {
+                    created.close();
+                    return;
+                }
+                hotkeyAppliedGeneration = generation;
+                adoptHotkey(created, bound);
+            });
+        });
+    }
+
+    /**
+     * Starts a background thread that will not keep the JVM alive.
+     * <p>
+     * The shortcut registration waits for the operating system, and the JVM must not
+     * wait for it: a hung registration would keep a closed application alive.
+     */
+    private static void startDaemon(String name, Runnable body) {
+        Thread thread = new Thread(body, name);
+        thread.setDaemon(true);
+        thread.start();
     }
 
     @Override
     public void stop() {
         // A recording left running would keep FFmpeg alive after the window closes.
+        // Stopping it asks FFmpeg to finalise the file, which can take up to fifteen
+        // seconds — far too long to hold the UI thread hostage while the app exits.
+        //
+        // The worker is deliberately NOT a daemon. A daemon thread would be killed the
+        // moment the JVM decided to exit, taking the MP4's moov index with it and
+        // leaving a file that no player can open. A normal thread keeps the JVM alive
+        // until FFmpeg has written the index, and because this thread does not join,
+        // the window still closes immediately.
         if (recorder.isRecording()) {
-            recorder.stop();
+            Thread finalizer = new Thread(() -> recorder.stop(), "jrec-finalize");
+            finalizer.start();
         }
         if (pet != null) {
             prefs.putDouble(PREFS_PET_X, pet.x());
@@ -523,18 +581,33 @@ public class JRecApp extends Application {
         // The shortcut has to be let go while the sheet is open. Otherwise pressing a
         // combination into the capture field is intercepted by this very application, and
         // the user cannot type the key they are trying to assign.
-        dialog.setOnShowing(e -> releaseHotkey());
+        dialog.setOnShowing(e -> {
+            settingsOpen = true;
+            releaseHotkey();
+        });
 
         dialog.setOnHidden(e -> {
+            settingsOpen = false;
             prefs.put(PREFS_DIR, dirField.getText());
             prefs.put(PREFS_QUALITY, qualityCombo.getValue());
-            if (hotkey == null) {
+            // The sheet releases the shortcut while it is open, so it has to be taken
+            // back afterwards — unless an assignment made inside the sheet already
+            // installed one. "hotkey == null" is not the right test any more: an
+            // assignment started inside the sheet may still be waiting for the system,
+            // and binding again on top of it would leave two live registrations. The
+            // generation counter says whether a request is still in flight.
+            if (!hotkeyPending() && !hotkeyBound) {
                 bindDesired();
             }
             refreshHistory();
             updateDeckSpec();
         });
         return dialog;
+    }
+
+    /** True while a registration started in this session has not reported back yet. */
+    private boolean hotkeyPending() {
+        return hotkeyGeneration != hotkeyAppliedGeneration;
     }
 
     private HBox soundSection() {
@@ -582,8 +655,8 @@ public class JRecApp extends Application {
         browse.setOnAction(e -> {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("选择保存目录");
-            Path current = Path.of(dirField.getText());
-            if (Files.isDirectory(current)) {
+            Path current = outputDirOrNull();
+            if (current != null && Files.isDirectory(current)) {
                 chooser.setInitialDirectory(current.toFile());
             }
             File chosen = chooser.showDialog(stage);
@@ -594,7 +667,14 @@ public class JRecApp extends Application {
 
         Button openDir = new Button("打开");
         openDir.getStyleClass().add("btn-ghost");
-        openDir.setOnAction(e -> openPath(Path.of(dirField.getText())));
+        openDir.setOnAction(e -> {
+            Path dir = outputDirOrNull();
+            if (dir == null) {
+                toast("保存目录无效，请重新选择", true);
+                return;
+            }
+            openPath(dir);
+        });
 
         HBox body = new HBox(9, dirField, browse, openDir);
         body.setAlignment(Pos.CENTER_LEFT);
@@ -613,9 +693,10 @@ public class JRecApp extends Application {
         hotkeyField.setPrefWidth(214);
         hotkeyField.setMinWidth(160);
         hotkeyField.setPromptText("点击后按下组合键");
-        hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
+        // The field shows what is actually registered, so it never claims a combination
+        // that the system refused.
+        hotkeyField.setText(boundSpec == null ? "" : boundSpec.label());
         hotkeyField.addEventFilter(KeyEvent.KEY_PRESSED, this::captureHotkeyKey);
-
         Button reset = new Button("恢复默认");
         reset.getStyleClass().add("btn-ghost");
         reset.setOnAction(e -> resetHotkey());
@@ -639,7 +720,8 @@ public class JRecApp extends Application {
         event.consume();
 
         if (event.getCode() == KeyCode.ESCAPE) {
-            hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
+            // Escape means "never mind" — the field goes back to what is registered.
+            hotkeyField.setText(boundSpec == null ? "" : boundSpec.label());
             showHotkeyMessage(null);
             return;
         }
@@ -650,8 +732,9 @@ public class JRecApp extends Application {
             return;
         }
         // The previous registration is still live here, so an identical combination would
-        // collide with ourselves and report a bogus conflict.
-        if (candidate.equals(hotkeySpec) && hotkeyBound) {
+        // collide with ourselves and report a bogus conflict. The comparison is against
+        // what is actually registered, which is not always what was last chosen.
+        if (candidate.equals(boundSpec) && hotkeyBound) {
             hotkeyField.setText(candidate.label());
             showHotkeyMessage(null);
             return;
@@ -660,60 +743,172 @@ public class JRecApp extends Application {
     }
 
     private void assignHotkey(HotkeySpec candidate) {
-        GlobalHotkey created = Hotkeys.create();
-        boolean bound = created.register(candidate,
-                () -> Platform.runLater(this::toggleRecording));
-        if (!bound) {
-            // Keep whatever was working before; a failed attempt must not leave the user
-            // with no shortcut at all.
-            created.close();
-            hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
-            showHotkeyMessage(created.failure());
-            return;
-        }
-        closeHotkey();
-        hotkey = created;
-        hotkeySpec = candidate;
-        hotkeyBound = true;
-        prefs.put(PREFS_HOTKEY, candidate.label());
+        // Registering with the system blocks until the OS answers, and the answer can
+        // take up to three seconds. Doing that on the FX thread freezes the window for
+        // that long, so it happens on a worker and the result comes back to the UI.
+        //
+        // The generation counter guards against two registrations overlapping: the user
+        // presses a combination and closes the settings sheet before the system has
+        // answered, which would otherwise leave two live registrations and the loser
+        // untracked.
+        int generation = ++hotkeyGeneration;
+        // Show what was pressed straight away. Registration can take a moment, and a
+        // field that does not react would look like the key press was swallowed.
         hotkeyField.setText(candidate.label());
-        showHotkeyMessage(null);
-        updateDeckHint();
+        startDaemon("jrec-hotkey-assign", () -> {
+            GlobalHotkey created;
+            boolean bound;
+            try {
+                created = Hotkeys.create();
+                // The user pressed this one on purpose, so it is bound exactly or not at
+                // all: quietly binding something else would leave them pressing a key
+                // that does nothing.
+                bound = created.register(candidate,
+                        () -> Platform.runLater(this::toggleRecording));
+            } catch (Throwable t) {
+                // A failure here must still release the generation, or the application
+                // would believe a registration is still in flight and never take the
+                // shortcut back.
+                hotkeyAppliedGeneration = generation;
+                Platform.runLater(() -> {
+                    hotkeyField.setText(boundSpec == null ? "" : boundSpec.label());
+                    showHotkeyMessage("快捷键注册失败：" + t);
+                });
+                return;
+            }
+            Platform.runLater(() -> {
+                if (generation != hotkeyGeneration) {
+                    // A newer request came in while this one was in flight; this result
+                    // is stale and must not replace the newer state.
+                    created.close();
+                    return;
+                }
+                hotkeyAppliedGeneration = generation;
+                if (!bound) {
+                    // Keep whatever was working before; a failed attempt must not leave the
+                    // user with no shortcut at all. The field goes back to what is really
+                    // in effect, so it never shows a combination that is not registered.
+                    created.close();
+                    hotkeyField.setText(boundSpec == null ? "" : boundSpec.label());
+                    showHotkeyMessage(created.failure());
+                    if (!settingsOpen) {
+                        // The sheet was closed while this attempt was in flight, so it
+                        // skipped taking the shortcut back. Without this the failed
+                        // attempt would leave the application with no shortcut at all.
+                        bindDesired();
+                    }
+                    return;
+                }
+                closeHotkey();
+                hotkey = created;
+                hotkeySpec = candidate;
+                boundSpec = candidate;
+                hotkeyBound = true;
+                prefs.put(PREFS_HOTKEY, candidate.label());
+                hotkeyField.setText(candidate.label());
+                showHotkeyMessage(null);
+                updateDeckHint();
+                if (settingsOpen) {
+                    // The sheet is still open. Keeping this registration alive would
+                    // make the system swallow the very combination the user is trying to
+                    // type into the field — and pressing the newly assigned shortcut
+                    // would start a recording instead of reaching the field. The choice
+                    // is recorded; the registration waits until the sheet closes.
+                    hotkey.close();
+                    hotkey = null;
+                    hotkeyBound = false;
+                    keyHint.setText("快捷键已暂停");
+                }
+            });
+        });
     }
 
     private void resetHotkey() {
         closeHotkey();
         hotkeySpec = null;
+        boundSpec = null;
         prefs.remove(PREFS_HOTKEY);
+        if (settingsOpen) {
+            // The sheet is open, so the shortcut must stay released. The default is
+            // picked when the sheet closes; binding it now would swallow the keystrokes
+            // the user types into the field.
+            hotkeyAppliedGeneration = hotkeyGeneration;
+            return;
+        }
         bindDesired();
     }
 
     /** Binds whatever {@link #hotkeySpec} says, falling back to the built-in list when null. */
     private void bindDesired() {
         closeHotkey();
-        GlobalHotkey created = Hotkeys.create();
-        boolean bound = created.register(hotkeySpec,
-                () -> Platform.runLater(this::toggleRecording));
-        adoptHotkey(created, bound);
+        // Off the FX thread: registration waits for the OS and can take seconds.
+        // The generation bump invalidates any assignment still in flight.
+        int generation = ++hotkeyGeneration;
+        startDaemon("jrec-hotkey-bind", () -> {
+            GlobalHotkey created;
+            boolean bound;
+            try {
+                created = Hotkeys.create();
+                bound = created.registerWithFallback(hotkeySpec,
+                        () -> Platform.runLater(this::toggleRecording));
+            } catch (Throwable t) {
+                hotkeyAppliedGeneration = generation;
+                Platform.runLater(() -> {
+                    showHotkeyMessage("快捷键注册失败：" + t);
+                    updateDeckHint();
+                });
+                return;
+            }
+            Platform.runLater(() -> {
+                if (generation != hotkeyGeneration) {
+                    created.close();
+                    return;
+                }
+                hotkeyAppliedGeneration = generation;
+                adoptHotkey(created, bound);
+            });
+        });
     }
 
     private void adoptHotkey(GlobalHotkey created, boolean bound) {
+        // A registration that landed while the settings sheet was open must not take
+        // effect: the sheet released the shortcut on purpose so the user can type the
+        // combination they want, and putting it back would swallow their keystroke.
+        if (dropIfSettingsOpen()) {
+            created.close();
+            return;
+        }
         hotkey = created;
         hotkeyBound = bound;
         if (bound) {
             String actual = created.label();
-            if (hotkeySpec == null) {
-                hotkeySpec = HotkeySpec.parse(actual);
-            }
-            if (hotkeySpec != null) {
-                prefs.put(PREFS_HOTKEY, hotkeySpec.label());
-            }
+            boundSpec = HotkeySpec.parse(actual);
+            // The user's own choice wins; the fallback only fills in when it was refused.
+            // This is what keeps "恢复默认" able to clear the preference: an automatically
+            // picked combination is never written back, so the next start tries the
+            // candidate list again instead of insisting on the one it happened to get.
+            boolean userChose = hotkeySpec != null;
             if (hotkeyField != null) {
-                hotkeyField.setText(hotkeySpec == null ? actual : hotkeySpec.label());
+                hotkeyField.setText(boundSpec == null ? actual : boundSpec.label());
+            }
+            if (!userChose && boundSpec != null) {
+                // Nothing was saved, so the app picked one from the candidate list. Say
+                // which one, without inventing a reason: on a fresh install the first
+                // candidate is usually free, and claiming it was "occupied" would be a
+                // detail nobody asked for and nobody can check.
+                toast("全局快捷键已绑定 " + boundSpec.label(), false);
+            } else if (userChose && !hotkeySpec.label().equals(actual)) {
+                // The saved combination was refused and a fallback got bound instead.
+                // The label now shows a combination the user never chose — saying so is
+                // the difference between an explained substitution and a silent one.
+                toast("原组合 " + hotkeySpec.label() + " 已被其它程序占用，已改用 " + actual, false);
             }
             showHotkeyMessage(null);
         } else {
             showHotkeyMessage(created.failure());
+            if (created.failure() != null) {
+                toast("全局快捷键不可用：" + created.failure(), true);
+            }
         }
         updateDeckHint();
     }
@@ -734,27 +929,67 @@ public class JRecApp extends Application {
         }
     }
 
+    /**
+     * Keeps a registration that finished while the settings sheet was open from taking
+     * effect.
+     * <p>
+     * The sheet releases the shortcut so that the combination the user is trying to type
+     * is not swallowed by this very application. A registration that was already in
+     * flight when the sheet opened would arrive afterwards and put the shortcut back,
+     * quietly breaking the very thing the release was for. The registration is dropped
+     * instead, and the sheet takes it back when it closes.
+     * <p>
+     * Only the startup binding is dropped. An assignment the user made inside the sheet
+     * is the whole point of the sheet and must survive; it is released separately, once
+     * it has been recorded.
+     *
+     * @return true when the registration was dropped and must be closed
+     */
+    private boolean dropIfSettingsOpen() {
+        if (!settingsOpen) {
+            return false;
+        }
+        // The generation is bumped so the in-flight result is not applied later either.
+        hotkeyGeneration++;
+        hotkeyAppliedGeneration = hotkeyGeneration;
+        return true;
+    }
+
     private void showHotkeyMessage(String error) {
         if (hotkeyStatus == null) {
             return;
         }
         boolean bad = error != null;
-        hotkeyStatus.setText(bad ? error : "当前生效：" + (hotkeySpec == null
-                ? "默认（自动挑选空闲组合）" : hotkeySpec.label()));
+        // The status line reports what is actually in effect, which is not always what
+        // the user last chose: a saved combination can be taken by another program
+        // between two runs, and the fallback binds a different one.
+        String text;
+        if (bad) {
+            text = error;
+        } else if (settingsOpen) {
+            // The sheet holds the shortcut released on purpose. Saying "in effect" here
+            // would be a lie: the combination is chosen, not active.
+            text = "已选择：" + (boundSpec == null ? "默认（自动挑选空闲组合）" : boundSpec.label())
+                    + " · 关闭本窗口后生效";
+        } else {
+            text = "当前生效：" + (boundSpec == null
+                    ? "默认（自动挑选空闲组合）" : boundSpec.label());
+        }
+        hotkeyStatus.setText(text);
         hotkeyStatus.getStyleClass().setAll(bad ? "field-error" : "field-note");
     }
 
     private void updateDeckHint() {
         if (recStopHint != null) {
-            recStopHint.setText(hotkeyBound && hotkeySpec != null
-                    ? "或按 " + hotkeySpec.label() + " 停止"
+            recStopHint.setText(hotkeyBound && boundSpec != null
+                    ? "或按 " + boundSpec.label() + " 停止"
                     : "");
         }
         if (keyHint == null) {
             return;
         }
-        if (hotkeyBound && hotkeySpec != null) {
-            keyHint.setText(hotkeySpec.label());
+        if (hotkeyBound && boundSpec != null) {
+            keyHint.setText(boundSpec.label());
             keyHint.getStyleClass().setAll("key-hint");
         } else {
             keyHint.setText("快捷键不可用");
@@ -770,7 +1005,7 @@ public class JRecApp extends Application {
      */
     private HBox petSection() {
         petSizeCombo = new ComboBox<>(FXCollections.observableArrayList("小", "中", "大"));
-        petSizeCombo.setValue(sizeLabel(prefs.getDouble(PREFS_PET_SIZE, PetWindow.DEFAULT_HEIGHT)));
+        petSizeCombo.setValue(PetWindow.sizeLabel(prefs.getDouble(PREFS_PET_SIZE, PetWindow.DEFAULT_HEIGHT)));
         petSizeCombo.getStyleClass().add("combo");
         petSizeCombo.setMaxWidth(Double.MAX_VALUE);
         petSizeCombo.valueProperty().addListener((obs, old, value) -> {
@@ -787,8 +1022,11 @@ public class JRecApp extends Application {
         petOpacityValue = new Label();
         petOpacityValue.getStyleClass().add("field-note");
 
-        double current = prefs.getDouble(PREFS_PET_OPACITY, 1.0) * 100;
-        petOpacitySlider = new Slider(35, 100, current);
+        // The slider clamps its value, so a stored value outside the range would be
+        // shown at one number while the pet is actually at another. Clamp first and
+        // report what will really be applied.
+        double current = clampOpacity(prefs.getDouble(PREFS_PET_OPACITY, 1.0) * 100);
+        petOpacitySlider = new Slider(MIN_OPACITY, MAX_OPACITY, current);
         petOpacityValue.setText(Math.round(current) + "%");
         petOpacitySlider.valueProperty().addListener((obs, old, value) -> {
             double percent = value.doubleValue();
@@ -833,19 +1071,31 @@ public class JRecApp extends Application {
         return section("05", "桌宠", "PET", body, false);
     }
 
-    private static double sizePixels(String label) {
-        return switch (label) {
-            case "小" -> 160;
-            case "大" -> 272;
-            default -> PetWindow.DEFAULT_HEIGHT;
-        };
+    /**
+     * Keeps an opacity percentage inside the range the slider offers.
+     *
+     * @return the percentage that will actually be applied
+     */
+    private static double clampOpacity(double percent) {
+        if (Double.isNaN(percent)) {
+            return MAX_OPACITY;
+        }
+        return Math.max(MIN_OPACITY, Math.min(MAX_OPACITY, percent));
     }
 
-    private static String sizeLabel(double pixels) {
-        if (pixels <= 175) {
-            return "小";
+    /**
+     * The pixel size behind a preset label.
+     * <p>
+     * The numbers live in {@link PetWindow} because the right-click menu offers the same
+     * presets; two copies of the same list would drift apart on the next change.
+     */
+    private static double sizePixels(String label) {
+        for (double pixels : PetWindow.SIZE_PRESETS) {
+            if (PetWindow.sizeLabel(pixels).equals(label)) {
+                return pixels;
+            }
         }
-        return pixels >= 240 ? "大" : "中";
+        return PetWindow.DEFAULT_HEIGHT;
     }
 
     private VBox historySection() {
@@ -1040,8 +1290,23 @@ public class JRecApp extends Application {
         boolean useRegion = modeGroup.getSelectedToggle() != fullScreenToggle && region != null;
         String area = useRegion ? region.width() + " × " + region.height() : "全屏";
         Object fps = fpsCombo == null ? null : fpsCombo.getValue();
-        AudioChoice mic = micCombo == null ? null : micCombo.getValue();
-        String audio = mic == null || mic.device() == null ? "无声音" : "麦克风";
+        // The readout has to name every source that will be recorded. Showing only
+        // "麦克风" while the system sound is mixed in as well makes the line a lie about
+        // the take that is about to happen.
+        boolean hasMic = micCombo != null && micCombo.getValue() != null
+                && micCombo.getValue().device() != null;
+        boolean hasSystem = systemCombo != null && systemCombo.getValue() != null
+                && systemCombo.getValue().device() != null;
+        String audio;
+        if (hasMic && hasSystem) {
+            audio = "麦克风 + 系统声音";
+        } else if (hasMic) {
+            audio = "麦克风";
+        } else if (hasSystem) {
+            audio = "系统声音";
+        } else {
+            audio = "无声音";
+        }
         deckSpec.setText(area + " · " + (fps == null ? 30 : fps) + " fps · " + audio);
     }
 
@@ -1057,6 +1322,13 @@ public class JRecApp extends Application {
     }
 
     private void startRecording() {
+        // The recorder's own state machine refuses a second start, but it only reaches
+        // that state once start() has run. Until then the button is still clickable, so
+        // two fast clicks would spawn two threads and the second would fail with a
+        // confusing "当前状态不能开始录制". The guard closes that window.
+        if (starting) {
+            return;
+        }
         RecordingConfig config;
         try {
             config = buildConfig();
@@ -1065,12 +1337,14 @@ public class JRecApp extends Application {
             return;
         }
 
+        starting = true;
         recordButton.setDisable(true);
         new Thread(() -> {
             try {
                 recorder.start(config);
             } catch (RuntimeException e) {
                 Platform.runLater(() -> {
+                    starting = false;
                     recordButton.setDisable(false);
                     toast(e.getMessage(), true);
                 });
@@ -1084,10 +1358,7 @@ public class JRecApp extends Application {
     }
 
     private RecordingConfig buildConfig() {
-        Path dir = Path.of(dirField.getText().trim());
-        if (dir.toString().isBlank()) {
-            throw new RecorderException("请先选择保存目录");
-        }
+        Path dir = outputDir();
         String name = "JRec_" + LocalDateTime.now().format(FILE_STAMP) + ".mp4";
         Path output = dir.resolve(name);
 
@@ -1146,7 +1417,19 @@ public class JRecApp extends Application {
                 ffmpegChip.setTooltip(new Tooltip(version));
                 loadOptionsAsync();
             }
-        }));
+        })).exceptionally(throwable -> {
+            // Without this the chip would sit on "检测中…" forever: the future fails, and
+            // nobody is told. The reason is worth more than a generic warning.
+            Throwable cause = throwable.getCause() != null ? throwable.getCause() : throwable;
+            Platform.runLater(() -> {
+                ffmpegChip.setText("FFmpeg 异常");
+                ffmpegChip.getStyleClass().setAll("chip", "chip-warn");
+                ffmpegChip.setTooltip(new Tooltip("无法检测 FFmpeg：" + cause.getMessage()));
+                recordButton.setDisable(true);
+                deckLabel.setText("检测 FFmpeg 时出错：" + cause.getMessage());
+            });
+            return null;
+        });
     }
 
     private void onFfmpegMissing() {
@@ -1328,10 +1611,36 @@ public class JRecApp extends Application {
             public void onFailed(String message, Throwable cause) {
                 Platform.runLater(() -> {
                     exitRecordingState();
+                    // The first line is the headline; the rest is the FFmpeg log tail, and
+                    // that tail is the only thing that says why the recording died. Showing
+                    // only the headline turns every failure into "录制失败", which is the
+                    // one sentence that helps nobody.
                     toast(firstLine(message), true);
+                    showFailureDetails(message);
                 });
             }
         });
+    }
+
+    /**
+     * Shows the full failure report, FFmpeg's own output included.
+     * <p>
+     * The toast carries the headline because it is where the eye already is, but the
+     * headline alone never says what to fix. The detail goes in a scrollable dialog,
+     * which is also the only place long enough to keep the log intact.
+     */
+    private void showFailureDetails(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.initOwner(stage);
+        alert.setTitle("录制失败");
+        alert.setHeaderText(firstLine(message));
+        TextArea area = new TextArea(message == null ? "未知错误" : message);
+        area.setEditable(false);
+        area.setWrapText(true);
+        area.setPrefRowCount(16);
+        area.setPrefColumnCount(80);
+        alert.getDialogPane().setContent(area);
+        alert.show();
     }
 
     private void enterRecordingState() {
@@ -1379,7 +1688,7 @@ public class JRecApp extends Application {
 
         wallClock = new Timeline(new KeyFrame(Duration.millis(200), e -> {
             long seconds = (System.nanoTime() - recordingStartedAt) / 1_000_000_000L;
-            timerLabel.setText(String.format("%02d:%02d", seconds / 60, seconds % 60));
+            timerLabel.setText(MediaProbe.formatDuration(seconds));
 
             if (controlBar != null && controlBar.isShowing()) {
                 controlBar.setTime(seconds);
@@ -1398,6 +1707,7 @@ public class JRecApp extends Application {
     }
 
     private void exitRecordingState() {
+        starting = false;
         if (wallClock != null) {
             wallClock.stop();
             wallClock = null;
@@ -1436,7 +1746,21 @@ public class JRecApp extends Application {
     // ------------------------------------------------------------------ history
 
     private void refreshHistory() {
-        Path dir = Path.of(dirField.getText());
+        Path dir = outputDirOrNull();
+        if (dir == null) {
+            // The field holds something unusable. Saying so beats a stack trace on the
+            // UI thread, and beats listing a directory that does not exist.
+            if (historyWhere != null) {
+                historyWhere.setText("保存目录无效");
+            }
+            latestFile = null;
+            latestName.setText("保存目录无效");
+            latestMeta.setText("请在「03 保存位置」里重新选择");
+            latestPlay.setDisable(true);
+            latestReveal.setDisable(true);
+            historyBox.getChildren().clear();
+            return;
+        }
         if (historyWhere != null) {
             historyWhere.setText(shortPath(dir));
         }
@@ -1462,7 +1786,16 @@ public class JRecApp extends Application {
                             latestMeta.setText(describe(info));
                         }
                     }))
-                    .exceptionally(t -> null);
+                    .exceptionally(t -> {
+                        // Without this the label would read "读取中…" forever, which looks
+                        // like the app is still working on a file it has given up on.
+                        Platform.runLater(() -> {
+                            if (file.equals(latestFile)) {
+                                latestMeta.setText("无法读取该文件的信息");
+                            }
+                        });
+                        return null;
+                    });
         }
 
         historyBox.getChildren().clear();
@@ -1527,7 +1860,12 @@ public class JRecApp extends Application {
         // Probing spawns FFmpeg, so keep it off the UI thread and fill the label later.
         CompletableFuture.supplyAsync(() -> MediaProbe.probe(file))
                 .thenAccept(info -> Platform.runLater(() -> meta.setText(describe(info))))
-                .exceptionally(t -> null);
+                .exceptionally(t -> {
+                    // Without this the row would read "读取中…" for good, which looks
+                    // like the app is still working on a file it has given up on.
+                    Platform.runLater(() -> meta.setText("无法读取该文件的信息"));
+                    return null;
+                });
         return row;
     }
 
@@ -1561,16 +1899,23 @@ public class JRecApp extends Application {
         pet.setOnToggle(this::toggleRecording);
         pet.setOnOpenMain(this::showMainWindow);
         pet.setOnOpenLatest(this::openLatest);
-        pet.setOnOpenFolder(() -> openPath(Path.of(dirField.getText())));
+        pet.setOnOpenFolder(() -> {
+            Path dir = outputDirOrNull();
+            if (dir == null) {
+                toast("保存目录无效，请重新选择", true);
+                return;
+            }
+            openPath(dir);
+        });
         pet.setOnHide(() -> setPetVisible(false));
         pet.setOnQuit(Platform::exit);
-        pet.setHint(hotkeySpec != null ? "点我：开始录制 · 右键更多" : "点我：开始录制");
+        pet.setHint("点我：开始录制 · 右键更多");
         // A size picked from the right-click menu has to reach the settings sheet too, or
         // the two places start disagreeing about how big the pet is.
         pet.setSizeHandler(pixels -> {
             prefs.putDouble(PREFS_PET_SIZE, pixels);
             if (petSizeCombo != null) {
-                petSizeCombo.setValue(sizeLabel(pixels));
+                petSizeCombo.setValue(PetWindow.sizeLabel(pixels));
             }
         });
 
@@ -1649,6 +1994,12 @@ public class JRecApp extends Application {
     // ------------------------------------------------------------------ misc
 
     private void toast(String message, boolean error) {
+        // Two toasts in a row would otherwise race: the first one's hide transition fires
+        // after the second one has already been written, and the new message disappears
+        // early. Stopping the previous transition first makes the last message win.
+        if (toastHide != null) {
+            toastHide.stop();
+        }
         toast.setText(message);
         toast.getStyleClass().setAll("toast");
         if (error) {
@@ -1657,9 +2008,17 @@ public class JRecApp extends Application {
         toast.setVisible(true);
         toast.setManaged(true);
         PauseTransition hide = new PauseTransition(Duration.seconds(error ? 6 : 4));
+        toastHide = hide;
         hide.setOnFinished(e -> {
+            // Only the transition that is still the current one may hide the toast. A
+            // newer message has installed its own transition, and this one must not
+            // take it down with it.
+            if (toastHide != hide) {
+                return;
+            }
             toast.setVisible(false);
             toast.setManaged(false);
+            toastHide = null;
         });
         hide.play();
     }
@@ -1672,14 +2031,80 @@ public class JRecApp extends Application {
         return nl > 0 ? message.substring(0, nl) : message;
     }
 
+    /**
+     * The directory the user typed, validated.
+     * <p>
+     * The field is free text, so the value can be anything: an empty string, a path with
+     * a character the platform forbids, a path that cannot be written to. Resolving it
+     * without checking turns a typo into an unhandled exception on the UI thread, so
+     * every read goes through here and reports the problem in the user's own words.
+     *
+     * @throws RecorderException when the text is not a usable directory
+     */
+    private Path outputDir() {
+        return outputDir(true);
+    }
+
+    /**
+     * The directory the user typed, validated.
+     *
+     * @param create whether a missing folder may be created. Listing the recordings must
+     *               not create anything: the history list is read on every window
+     *               refresh, and a stray empty folder would appear for a path the user
+     *               only typed but never used.
+     * @throws RecorderException when the text is not a usable directory
+     */
+    private Path outputDir(boolean create) {
+        String text = dirField.getText() == null ? "" : dirField.getText().trim();
+        if (text.isEmpty()) {
+            throw new RecorderException("请先选择保存目录");
+        }
+        Path dir;
+        try {
+            dir = Path.of(text).toAbsolutePath();
+        } catch (InvalidPathException e) {
+            throw new RecorderException("保存目录不是合法的路径：" + text);
+        }
+        if (Files.exists(dir) && !Files.isDirectory(dir)) {
+            throw new RecorderException("保存目录指向一个文件，不是文件夹：" + dir);
+        }
+        if (!Files.exists(dir)) {
+            if (!create) {
+                throw new RecorderException("保存目录不存在：" + dir);
+            }
+            // A folder that does not exist yet is fine — the recorder creates it. But it
+            // has to be creatable, and the surest way to know is to create it here.
+            try {
+                Files.createDirectories(dir);
+            } catch (IOException e) {
+                throw new RecorderException("无法创建保存目录：" + dir + "（" + e.getMessage() + "）");
+            }
+        }
+        return dir;
+    }
+
+    /** The directory, or null when it cannot be resolved — for display-only call sites. */
+    private Path outputDirOrNull() {
+        try {
+            return outputDir(false);
+        } catch (RecorderException e) {
+            return null;
+        }
+    }
+
     private Path defaultOutputDir() {
         String saved = prefs.get(PREFS_DIR, null);
         if (saved != null && !saved.isBlank()) {
-            Path candidate = Path.of(saved);
-            // A remembered path can disappear (external drive, cleaned folder). Falling
-            // back beats opening with a directory that cannot be written to.
-            if (Files.isDirectory(candidate)) {
-                return candidate;
+            try {
+                Path candidate = Path.of(saved);
+                // A remembered path can disappear (external drive, cleaned folder). Falling
+                // back beats opening with a directory that cannot be written to.
+                if (Files.isDirectory(candidate)) {
+                    return candidate;
+                }
+            } catch (InvalidPathException e) {
+                // The preference holds a path this platform cannot parse. That must not
+                // stop the application from starting — the default is a fine answer.
             }
         }
         return Path.of(System.getProperty("user.home"), "Videos", "JRec");

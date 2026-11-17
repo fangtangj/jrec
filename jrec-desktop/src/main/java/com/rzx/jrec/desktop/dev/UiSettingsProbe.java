@@ -28,6 +28,12 @@ import java.lang.reflect.Field;
  */
 public class UiSettingsProbe extends Application {
 
+    /**
+     * The path shown in the screenshot.
+     * <p>
+     * A neutral, public location: the real save directory carries the account name of
+     * the machine that ran the probe, and this image goes into a public repository.
+     */
     private static final String DOC_OUTPUT_PATH = "C:\\Users\\Public\\Videos\\JRec";
 
     @Override

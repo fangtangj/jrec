@@ -2,6 +2,7 @@ package com.rzx.jrec.core;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -112,8 +113,84 @@ public final class FfmpegLocator {
      * Lists the encoders this build actually contains, so the UI can hide
      * {@code h264_nvenc} on a machine without an NVIDIA card instead of failing at
      * record time.
+     * <p>
+     * The hardware encoders are verified, not merely listed. A stock FFmpeg build
+     * carries {@code h264_nvenc} whether or not the machine has an NVIDIA card, so
+     * reading the encoder list alone would offer an option that fails the first time
+     * somebody picks it. Each candidate is asked to encode a single black frame: that
+     * costs a few milliseconds per candidate and answers the question that matters —
+     * can this machine actually use it.
      */
     public static List<String> availableH264Encoders(Path ffmpeg) {
+        List<String> listed = listEncoders(ffmpeg);
+        List<String> found = new ArrayList<>();
+        for (String name : listed) {
+            if (isSoftwareEncoder(name) || canEncode(ffmpeg, name)) {
+                found.add(name);
+            }
+        }
+        return found.isEmpty() ? List.of("libx264") : found;
+    }
+
+    /** Software encoders always work when the build carries them; no trial run needed. */
+    private static boolean isSoftwareEncoder(String name) {
+        return "libx264".equals(name);
+    }
+
+    /**
+     * Asks FFmpeg to encode one black frame with the given encoder.
+     *
+     * @return true when the encoder produced the frame
+     */
+    private static boolean canEncode(Path ffmpeg, String encoder) {
+        Process started;
+        try {
+            started = new ProcessBuilder(ffmpeg.toString(),
+                    "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.04",
+                    "-frames:v", "1", "-c:v", encoder, "-f", "null", "-")
+                    .redirectErrorStream(true)
+                    .start();
+        } catch (IOException e) {
+            return false;
+        }
+        final Process p = started;
+        try {
+            // The output has to be drained while the process runs, or it blocks on a full
+            // pipe. Reading it on a worker thread lets the timeout below actually fire:
+            // readAllBytes() on this thread would wait for the process to exit, and the
+            // timeout would never be reached.
+            Thread drain = new Thread(() -> {
+                try (InputStream in = p.getInputStream()) {
+                    byte[] buffer = new byte[4096];
+                    while (in.read(buffer) != -1) {
+                        // The output is not needed; reading it is what keeps the pipe open.
+                    }
+                } catch (IOException ignored) {
+                    // The process was killed; nothing more to read.
+                }
+            }, "jrec-encoder-probe");
+            drain.setDaemon(true);
+            drain.start();
+
+            if (!p.waitFor(15, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return false;
+            }
+            drain.join(1000);
+            return p.exitValue() == 0;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } finally {
+            if (p.isAlive()) {
+                p.destroyForcibly();
+            }
+        }
+    }
+
+    /** Encoder names this build carries, read from {@code ffmpeg -encoders}. */
+    private static List<String> listEncoders(Path ffmpeg) {
         List<String> found = new ArrayList<>();
         List<String> candidates = List.of("libx264", "h264_nvenc", "h264_qsv", "h264_amf");
         try {
@@ -134,6 +211,6 @@ public final class FfmpegLocator {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        return found.isEmpty() ? List.of("libx264") : found;
+        return found;
     }
 }

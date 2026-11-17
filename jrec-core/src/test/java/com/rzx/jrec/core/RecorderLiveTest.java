@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -23,9 +24,42 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class RecorderLiveTest {
 
+    /**
+     * True when this machine can actually capture the screen.
+     * <p>
+     * FFmpeg being installed is not enough: on a headless build agent the capture
+     * backend has no desktop to read, and the recording fails. Without this check the
+     * test would fail on every CI runner, or — worse, if the assertion were relaxed to
+     * match — pass without ever recording anything.
+     */
+    private static boolean hasDesktop() {
+        try {
+            java.awt.GraphicsEnvironment environment =
+                    java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
+            if (environment.isHeadless()) {
+                return false;
+            }
+            java.awt.GraphicsDevice[] devices = environment.getScreenDevices();
+            if (devices.length == 0) {
+                return false;
+            }
+            java.awt.DisplayMode mode = devices[0].getDisplayMode();
+            // A virtual display with no size is what a session without a real screen
+            // reports. Capturing it produces nothing worth asserting on.
+            return mode.getWidth() > 0 && mode.getHeight() > 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static void assumeDesktop() {
+        assumeTrue(FfmpegLocator.find().isPresent(), "FFmpeg 不可用，跳过实拍测试");
+        assumeTrue(hasDesktop(), "没有交互式桌面会话，跳过实拍测试");
+    }
+
     @Test
     void recordsARegionToAPlayableMp4(@TempDir Path tempDir) throws Exception {
-        assumeTrue(FfmpegLocator.find().isPresent(), "FFmpeg 不可用，跳过实拍测试");
+        assumeDesktop();
 
         Path output = tempDir.resolve("region.mp4");
         RecordingConfig config = RecordingConfig.builder()
@@ -75,6 +109,9 @@ class RecorderLiveTest {
 
     @Test
     void reportsFailureInsteadOfHangingWhenOutputDirectoryIsUnwritable(@TempDir Path tempDir) {
+        // This one never touches the screen: it fails while preparing the output
+        // directory, before FFmpeg is ever started. It needs FFmpeg to be installed
+        // (the locator looks for it) but not a desktop session.
         assumeTrue(FfmpegLocator.find().isPresent(), "FFmpeg 不可用，跳过实拍测试");
 
         // A directory that cannot be created (a file already occupies the name) must

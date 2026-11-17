@@ -107,6 +107,27 @@
     -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.14), 5, 0.05, 0, 1);
 }
 
+/* ══════════════ keyboard focus ══════════════
+   A visible focus ring on everything focusable. Without it a keyboard user cannot
+   tell where they are — the mouse user never notices, because the pointer is the
+   cursor. The ring uses the signal colour so it cannot be mistaken for the border
+   of a selected pill. */
+
+.pill:focused,
+.btn-solid:focused,
+.btn-ghost:focused,
+.check:focused {
+    -fx-border-color: #E2400F;
+    -fx-border-width: 2;
+    -fx-border-radius: 7;
+    -fx-background-color: derive(-fx-background-color, 6%, 0.12);
+}
+
+.pill:focused:selected,
+.btn-solid:focused {
+    -fx-background-color: derive(-fx-background-color, -6%, 0.10);
+}
+
 /* ══════════════ newest recording ══════════════
    Takes the space the live preview used to occupy. A tinted plate rather than white so
    it reads as a result panel inside the sheet, not as another section of the form. */

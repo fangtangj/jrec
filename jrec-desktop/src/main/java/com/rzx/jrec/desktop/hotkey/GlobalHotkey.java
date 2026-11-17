@@ -23,6 +23,19 @@ public interface GlobalHotkey extends AutoCloseable {
      */
     boolean register(HotkeySpec preferred, Runnable onTrigger);
 
+    /**
+     * Registers a combination, falling back to a free built-in one when it is refused.
+     * <p>
+     * This is the startup path. A combination that was free yesterday may be owned by
+     * another program today, and a recorder whose only shortcut stopped working would
+     * silently stop being used. The user is told which combination actually got bound,
+     * so nothing is replaced quietly.
+     *
+     * @param preferred the combination the user chose, or null to pick the first free one
+     * @return false when nothing could be registered
+     */
+    boolean registerWithFallback(HotkeySpec preferred, Runnable onTrigger);
+
     /** Why the last {@link #register} failed, or null when it succeeded. */
     String failure();
 

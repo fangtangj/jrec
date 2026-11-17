@@ -41,9 +41,22 @@ public final class MediaProbe {
         }
 
         public String durationText() {
-            long total = duration.getSeconds();
-            return String.format("%02d:%02d", total / 60, total % 60);
+            return formatDuration(duration.getSeconds());
         }
+    }
+
+    /**
+     * Formats a length of time as {@code mm:ss}.
+     * <p>
+     * One implementation because three places format the same thing — the file list, the
+     * recording timer and the floating bar — and a clock that reads 61:00 in one of them
+     * would be a bug nobody could explain.
+     *
+     * @param totalSeconds the length in seconds; negative values are treated as zero
+     */
+    public static String formatDuration(long totalSeconds) {
+        long safe = Math.max(0, totalSeconds);
+        return String.format("%02d:%02d", safe / 60, safe % 60);
     }
 
     public static MediaInfo probe(Path file) {

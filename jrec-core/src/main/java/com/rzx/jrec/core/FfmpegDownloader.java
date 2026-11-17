@@ -75,7 +75,7 @@ public final class FfmpegDownloader {
                 Files.deleteIfExists(tempGz);
             }
 
-            listener.onStatus("正在校验…");
+            listener.onStatus("正在检查…");
             String version = FfmpegLocator.version(target);
             if (!version.contains("ffmpeg version")) {
                 throw new RecorderException("下载的 FFmpeg 无法运行：" + version);
@@ -128,7 +128,11 @@ public final class FfmpegDownloader {
         long total = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
         long read = 0;
         byte[] buffer = new byte[64 * 1024];
-        try (InputStream in = response.body(); OutputStream out = Files.newOutputStream(target)) {
+        // The response body has to be closed explicitly: this is a streaming body, and
+        // leaving it open keeps the connection — and its buffer — alive for the whole
+        // download.
+        try (InputStream in = response.body();
+             OutputStream out = Files.newOutputStream(target)) {
             int n;
             while ((n = in.read(buffer)) != -1) {
                 out.write(buffer, 0, n);

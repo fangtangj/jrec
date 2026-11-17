@@ -14,7 +14,10 @@ set "SETTINGS="
 if exist ".cache\settings.xml" set "SETTINGS=-s .cache\settings.xml"
 
 echo [jrec] 1/3 compiling and packaging jars
-call mvn %SETTINGS% -B -q -DskipTests package
+rem install, not package: step 2 resolves jrec-core through the local repository, so the
+rem reactor has to publish it there first. A clean clone has no jrec-core in ~/.m2 and
+rem "package" would leave step 2 with an unresolvable dependency.
+call mvn %SETTINGS% -B -q -DskipTests install
 if errorlevel 1 goto fail
 
 echo [jrec] 2/3 collecting runtime dependencies
@@ -23,7 +26,8 @@ call mvn %SETTINGS% -B -q -f jrec-desktop\pom.xml dependency:copy-dependencies -
 if errorlevel 1 goto fail
 
 rem The platform-neutral JavaFX jars are 300-byte stubs; the -win ones carry the code.
-del /q "jrec-desktop\target\dist-lib\javafx-*-21.0.2.jar" 2>nul
+rem The for-loop form tolerates "no match" without leaving a non-zero errorlevel behind.
+for %%f in ("jrec-desktop\target\dist-lib\javafx-*-21.0.2.jar") do del /q "%%f"
 copy /y "jrec-desktop\target\jrec-desktop-0.1.0.jar" "jrec-desktop\target\dist-lib\" >nul
 if errorlevel 1 goto fail
 

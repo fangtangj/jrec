@@ -109,9 +109,14 @@ public final class Recorder {
             lastProgress = null;
             emitLog("$ " + CommandBuilder.toDisplayString(cmd));
 
-            Process p = new ProcessBuilder(cmd)
-                    .redirectErrorStream(true)
-                    .start();
+            Process p;
+            try {
+                p = new ProcessBuilder(cmd)
+                        .redirectErrorStream(true)
+                        .start();
+            } catch (IOException e) {
+                throw new RecorderException("启动 FFmpeg 失败：" + e.getMessage(), e);
+            }
             this.process = p;
             state.set(RecorderState.RECORDING);
 
@@ -126,7 +131,7 @@ public final class Recorder {
             throw e;
         } catch (IOException e) {
             state.set(RecorderState.FAILED);
-            throw new RecorderException("启动 FFmpeg 失败：" + e.getMessage(), e);
+            throw new RecorderException("准备输出目录失败：" + e.getMessage(), e);
         }
     }
 
@@ -211,14 +216,24 @@ public final class Recorder {
 
         Path output = config.outputPath();
         boolean fileUsable = Files.isRegularFile(output) && sizeOf(output) > 0;
+        // A file that exists is not the same as a file that is finished. FFmpeg can
+        // exit non-zero after having written most of the stream, leaving a file that
+        // plays up to the point where it stopped. Reporting that as a success would
+        // tell the user the take is ready when it is silently truncated.
+        boolean exitedCleanly = exitCode == 0;
 
-        if (fileUsable) {
+        if (fileUsable && exitedCleanly) {
             Duration duration = lastProgress != null ? lastProgress.elapsed() : Duration.ZERO;
             RecordingResult result = new RecordingResult(output, duration, sizeOf(output));
             lastResult = result;
             state.set(RecorderState.IDLE);
             emitLog("录制结束：" + output + "（" + result.humanReadableSize() + "）");
             emitFinished(result);
+        } else if (fileUsable) {
+            state.set(RecorderState.FAILED);
+            String tail = String.join("\n", logTail);
+            emitFailed("FFmpeg 以错误码 " + exitCode + " 退出，文件可能不完整（"
+                    + output.getFileName() + "）。FFmpeg 输出：\n" + tail, null);
         } else {
             state.set(RecorderState.FAILED);
             String tail = String.join("\n", logTail);

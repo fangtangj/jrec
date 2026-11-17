@@ -52,6 +52,16 @@ public final class PetWindow {
 
     /** Default rendered height. The source art is 512 px tall, so 210 stays crisp. */
     public static final double DEFAULT_HEIGHT = 210;
+
+    /**
+     * The three size presets, smallest first.
+     * <p>
+     * The right-click menu and the settings sheet both offer them, so the numbers live
+     * here rather than in each place: two lists that agree today are two lists that
+     * drift apart after the next change.
+     */
+    public static final List<Double> SIZE_PRESETS = List.of(160.0, DEFAULT_HEIGHT, 272.0);
+
     private static final double DRAG_SLOP = 4;
 
     /** Click vs double click. Long enough to catch the second press, short enough to feel. */
@@ -80,6 +90,8 @@ public final class PetWindow {
     private ScaleTransition hoverMotion;
     private PauseTransition blinkTimer;
     private PauseTransition hopTimer;
+    /** False once the life loop is stopped; orphaned timers check it before rescheduling. */
+    private boolean lifeLoopRunning;
     private Image openEyes;
     private Image closedEyes;
     private DoubleConsumer sizeChosen = px -> { };
@@ -308,20 +320,17 @@ public final class PetWindow {
     private record SizeOption(String label, double pixels) {
     }
 
-    private static final List<SizeOption> SIZES = List.of(
-            new SizeOption("小", 160), new SizeOption("中", DEFAULT_HEIGHT), new SizeOption("大", 272));
-
     /** Size presets, right where the user already is instead of three clicks into settings. */
     private Menu sizeMenu() {
         Menu size = new Menu("大小");
         ToggleGroup group = new ToggleGroup();
-        for (SizeOption option : SIZES) {
-            RadioMenuItem item = new RadioMenuItem(option.label());
+        for (double pixels : SIZE_PRESETS) {
+            RadioMenuItem item = new RadioMenuItem(sizeLabel(pixels));
             item.setToggleGroup(group);
-            item.setUserData(option.pixels());
+            item.setUserData(pixels);
             item.setOnAction(e -> {
-                setArtHeight(option.pixels());
-                sizeChosen.accept(option.pixels());
+                setArtHeight(pixels);
+                sizeChosen.accept(pixels);
             });
             size.getItems().add(item);
         }
@@ -330,6 +339,17 @@ public final class PetWindow {
             t.setSelected(Math.abs(pixels - currentHeight()) < 1);
         }));
         return size;
+    }
+
+    /** The label the size presets are shown under, in both the menu and the settings. */
+    public static String sizeLabel(double pixels) {
+        if (Math.abs(pixels - DEFAULT_HEIGHT) < 1) {
+            return "中";
+        }
+        if (pixels < DEFAULT_HEIGHT) {
+            return "小";
+        }
+        return "大";
     }
 
     public void setSizeHandler(DoubleConsumer handler) {
@@ -343,9 +363,13 @@ public final class PetWindow {
     /**
      * Pulls the pet flush against whichever screen edge it was dropped near. A mascot left
      * three pixels off the edge looks like a mistake rather than a position.
+     * <p>
+     * The screen is the one the pet is currently on, not always the primary one: a user
+     * who works on a second monitor and drops the pet there expects it to snap to that
+     * monitor's edge, not to jump across to another one.
      */
     private void snapToEdges() {
-        Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+        Rectangle2D bounds = screenUnderPet();
         double x = stage.getX();
         double y = stage.getY();
         double w = stage.getWidth();
@@ -365,6 +389,43 @@ public final class PetWindow {
         if (x != stage.getX() || y != stage.getY()) {
             slideTo(x, y);
         }
+    }
+
+    /**
+     * The screen the pet should live on.
+     * <p>
+     * A position on a known screen picks that screen. A position on none of them — the
+     * monitor was unplugged, or there is no remembered position — falls back to the
+     * primary screen.
+     */
+    private Rectangle2D screenFor(double x, double y) {
+        if (!Double.isNaN(x) && !Double.isNaN(y)) {
+            for (Screen screen : Screen.getScreens()) {
+                Rectangle2D bounds = screen.getVisualBounds();
+                if (bounds.contains(x, y)) {
+                    return bounds;
+                }
+            }
+        }
+        return Screen.getPrimary().getVisualBounds();
+    }
+
+    /**
+     * The visual bounds of the screen the pet is on.
+     * <p>
+     * Falls back to the primary screen when the pet sits outside every known screen —
+     * a position that can happen when a monitor is unplugged.
+     */
+    private Rectangle2D screenUnderPet() {
+        double centerX = stage.getX() + stage.getWidth() / 2;
+        double centerY = stage.getY() + stage.getHeight() / 2;
+        for (Screen screen : Screen.getScreens()) {
+            Rectangle2D bounds = screen.getVisualBounds();
+            if (bounds.contains(centerX, centerY)) {
+                return bounds;
+            }
+        }
+        return Screen.getPrimary().getVisualBounds();
     }
 
     private void slideTo(double targetX, double targetY) {
@@ -389,13 +450,21 @@ public final class PetWindow {
      * Blinks and occasional hops, on independent timers with random gaps. The point is that
      * the pet never falls into a visible rhythm: anything exactly periodic stops reading as
      * alive within about a minute.
+     * <p>
+     * Each timer reschedules itself when it fires, so a chain that is started twice would
+     * keep two sets of timers alive with only one of them tracked by a field. The
+     * {@code lifeLoopRunning} flag is what makes that impossible: a timer that fires after
+     * the loop was stopped reschedules nothing, and the orphaned chain ends with itself.
      */
     private void startLifeLoop() {
+        stopLifeLoop();
+        lifeLoopRunning = true;
         scheduleBlink();
         scheduleHop();
     }
 
     private void stopLifeLoop() {
+        lifeLoopRunning = false;
         if (blinkTimer != null) {
             blinkTimer.stop();
             blinkTimer = null;
@@ -410,13 +479,17 @@ public final class PetWindow {
     }
 
     private void scheduleBlink() {
-        blinkTimer = new PauseTransition(
+        PauseTransition timer = new PauseTransition(
                 Duration.millis(ThreadLocalRandom.current().nextInt(2800, 7200)));
-        blinkTimer.setOnFinished(e -> {
+        timer.setOnFinished(e -> {
+            if (!lifeLoopRunning) {
+                return;
+            }
             blink();
             scheduleBlink();
         });
-        blinkTimer.play();
+        blinkTimer = timer;
+        timer.play();
     }
 
     private void blink() {
@@ -430,13 +503,17 @@ public final class PetWindow {
     }
 
     private void scheduleHop() {
-        hopTimer = new PauseTransition(
+        PauseTransition timer = new PauseTransition(
                 Duration.millis(ThreadLocalRandom.current().nextInt(9000, 17000)));
-        hopTimer.setOnFinished(e -> {
+        timer.setOnFinished(e -> {
+            if (!lifeLoopRunning) {
+                return;
+            }
             hop();
             scheduleHop();
         });
-        hopTimer.play();
+        hopTimer = timer;
+        timer.play();
     }
 
     /**
@@ -461,6 +538,10 @@ public final class PetWindow {
      * Shows the pet at a remembered spot, clamped to the screen it lands on. A saved
      * position can easily point off-screen after a monitor change, and a mascot you cannot
      * reach is a bug report.
+     * <p>
+     * The screen is chosen by where the saved position points, not by "the primary
+     * screen": a pet that lives on the second monitor must not be dragged back to the
+     * first one every time it is shown.
      */
     public void show(double x, double y) {
         stage.show();
@@ -469,7 +550,7 @@ public final class PetWindow {
         double px = Double.isNaN(x) ? Double.NaN : x;
         double py = Double.isNaN(y) ? Double.NaN : y;
 
-        Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+        Rectangle2D bounds = screenFor(px, py);
         if (Double.isNaN(px) || Double.isNaN(py)) {
             px = bounds.getMaxX() - width - 24;
             py = bounds.getMaxY() - height - 24;
@@ -494,7 +575,8 @@ public final class PetWindow {
 
     /** Puts the pet back in the corner it starts in. */
     public void resetPosition() {
-        stage.setX(Double.NaN);
+        // show() with NaN positions is what "back to the corner" means; assigning NaN to
+        // the stage first would only put a NaN into the window for a moment.
         show(Double.NaN, Double.NaN);
     }
 
@@ -507,6 +589,9 @@ public final class PetWindow {
 
     public void close() {
         stopMotion();
+        // The timers reschedule themselves, so closing the window without stopping them
+        // leaves them running for the rest of the process's life.
+        stopLifeLoop();
         stage.close();
     }
 
@@ -575,7 +660,7 @@ public final class PetWindow {
     // ------------------------------------------------------------------ helpers
 
     private void clampOnScreen() {
-        Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+        Rectangle2D bounds = screenUnderPet();
         double width = stage.getWidth();
         double height = stage.getHeight();
         stage.setX(Math.max(bounds.getMinX(), Math.min(stage.getX(), bounds.getMaxX() - width)));

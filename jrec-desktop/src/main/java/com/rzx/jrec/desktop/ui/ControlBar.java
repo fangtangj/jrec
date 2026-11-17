@@ -7,6 +7,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -57,6 +58,10 @@ public final class ControlBar {
         Region square = new Region();
         square.getStyleClass().add("bar-stop-mark");
         stopButton.setGraphic(square);
+        // The button is a square with no text on it, so without a name it is invisible
+        // to a screen reader — and to anyone who cannot tell a stop square from a dot.
+        stopButton.setAccessibleText("停止录制");
+        stopButton.setTooltip(new Tooltip("停止录制"));
         stopButton.setOnAction(e -> {
             if (onStop != null) {
                 onStop.run();
@@ -64,6 +69,8 @@ public final class ControlBar {
         });
 
         hideButton.getStyleClass().add("bar-close");
+        hideButton.setAccessibleText("隐藏控制条");
+        hideButton.setTooltip(new Tooltip("隐藏控制条"));
         hideButton.setOnAction(e -> hide());
 
         HBox row = new HBox(9, dot, clock, stopButton, hideButton);
@@ -120,7 +127,7 @@ public final class ControlBar {
 
     /** Called once per second from the recording clock. */
     public void setTime(long seconds) {
-        clock.setText(String.format("%02d:%02d", seconds / 60, seconds % 60));
+        clock.setText(com.rzx.jrec.core.MediaProbe.formatDuration(seconds));
     }
 
     public Stage stage() {

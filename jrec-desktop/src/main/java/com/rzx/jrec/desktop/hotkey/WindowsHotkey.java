@@ -4,7 +4,6 @@ import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinUser;
 
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,14 +39,6 @@ public final class WindowsHotkey implements GlobalHotkey {
     /** Win32 ERROR_HOTKEY_ALREADY_REGISTERED. */
     private static final int ERROR_ALREADY_REGISTERED = 1409;
 
-    /** Preferred first; the rest are fallbacks for combinations someone else already owns. */
-    private static final List<HotkeySpec> DEFAULTS = List.of(
-            HotkeySpec.of(java.util.EnumSet.of(HotkeySpec.Mod.CTRL, HotkeySpec.Mod.ALT), 0x52, "R"),
-            HotkeySpec.of(java.util.EnumSet.of(HotkeySpec.Mod.CTRL, HotkeySpec.Mod.ALT), 0x53, "S"),
-            HotkeySpec.of(java.util.EnumSet.of(HotkeySpec.Mod.CTRL, HotkeySpec.Mod.ALT), 0x78, "F9"),
-            HotkeySpec.of(java.util.EnumSet.of(HotkeySpec.Mod.CTRL, HotkeySpec.Mod.SHIFT), 0x78, "F9")
-    );
-
     private final AtomicBoolean registered = new AtomicBoolean(false);
     private final AtomicReference<String> boundLabel = new AtomicReference<>("—");
     private final AtomicReference<String> failure = new AtomicReference<>();
@@ -71,6 +62,20 @@ public final class WindowsHotkey implements GlobalHotkey {
 
     @Override
     public boolean register(HotkeySpec preferred, Runnable onTrigger) {
+        return register(preferred, onTrigger, false);
+    }
+
+    @Override
+    public boolean registerWithFallback(HotkeySpec preferred, Runnable onTrigger) {
+        return register(preferred, onTrigger, true);
+    }
+
+    /**
+     * @param allowFallback true to bind a free built-in combination when the preferred one
+     *                      is refused. Used at startup, where the saved combination may have
+     *                      been taken by another program since the last run.
+     */
+    private boolean register(HotkeySpec preferred, Runnable onTrigger, boolean allowFallback) {
         close();
         failure.set(null);
 
@@ -81,8 +86,20 @@ public final class WindowsHotkey implements GlobalHotkey {
             try {
                 loopThreadId.set(Kernel32.INSTANCE.GetCurrentThreadId());
 
-                HotkeySpec bound = preferred != null ? bindExact(preferred) : bindFirstAvailable();
+                // A null preferred means "whatever is free", which is the same request as
+                // "this one, and fall back if it is taken" — so both go through the
+                // fallback selector. An explicitly chosen combination is bound as-is.
+                HotkeyCandidates.Selection selection = (preferred == null || allowFallback)
+                        ? HotkeyCandidates.selectWithFallback(preferred, this::tryBind)
+                        : HotkeyCandidates.selectExact(preferred, this::tryBind);
+
+                HotkeySpec bound = selection.chosen();
                 if (bound == null) {
+                    if (selection.preferredFailure() != null) {
+                        failure.set(selection.preferredFailure());
+                    } else if (preferred == null) {
+                        failure.set("默认组合全被占用");
+                    }
                     ready.countDown();
                     return;
                 }
@@ -126,30 +143,23 @@ public final class WindowsHotkey implements GlobalHotkey {
         return ok.get();
     }
 
-    private HotkeySpec bindExact(HotkeySpec spec) {
+    /**
+     * Registers one combination with the system.
+     *
+     * @return null when the system accepted it, otherwise why it refused
+     */
+    private String tryBind(HotkeySpec spec) {
         // MOD_NOREPEAT: holding the key fires once. Without it, a held Ctrl+Alt+S toggles
         // recording on and off several times a second.
         boolean bound = User32.INSTANCE.RegisterHotKey(null, ID,
                 spec.modifierMask() | MOD_NOREPEAT, spec.vk());
-        if (!bound) {
-            int error = Kernel32.INSTANCE.GetLastError();
-            failure.set(error == ERROR_ALREADY_REGISTERED
-                    ? spec.label() + " 已被其它程序占用"
-                    : spec.label() + " 注册失败（错误码 " + error + "）");
+        if (bound) {
             return null;
         }
-        return spec;
-    }
-
-    private HotkeySpec bindFirstAvailable() {
-        for (HotkeySpec candidate : DEFAULTS) {
-            if (User32.INSTANCE.RegisterHotKey(null, ID,
-                    candidate.modifierMask() | MOD_NOREPEAT, candidate.vk())) {
-                return candidate;
-            }
-        }
-        failure.set("默认组合全被占用");
-        return null;
+        int error = Kernel32.INSTANCE.GetLastError();
+        return error == ERROR_ALREADY_REGISTERED
+                ? spec.label() + " 已被其它程序占用"
+                : spec.label() + " 注册失败（错误码 " + error + "）";
     }
 
     @Override
@@ -168,9 +178,18 @@ public final class WindowsHotkey implements GlobalHotkey {
         }
         if (loop != null) {
             try {
-                loop.join(300);
+                // The loop thread unregisters the combination itself on the way out, so
+                // it has to be given time to finish. Waiting for it — rather than for a
+                // fixed guess — is what makes the release reliable.
+                loop.join(1000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            }
+            if (loop.isAlive()) {
+                // It did not finish. The registration is released by the thread's own
+                // finally block whenever it does, but saying so beats pretending the
+                // shortcut is gone while the system still holds it.
+                failure.set("快捷键未能及时释放，可能仍被系统占用");
             }
             loop = null;
         }

@@ -20,6 +20,11 @@ public final class UnsupportedHotkey implements GlobalHotkey {
     }
 
     @Override
+    public boolean registerWithFallback(HotkeySpec preferred, Runnable onTrigger) {
+        return false;
+    }
+
+    @Override
     public String failure() {
         return "当前系统没有全局快捷键支持";
     }
