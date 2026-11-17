@@ -35,10 +35,12 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
@@ -92,6 +94,9 @@ public class JRecApp extends Application {
     private static final String PREFS_PET = "petVisible";
     private static final String PREFS_PET_X = "petX";
     private static final String PREFS_PET_Y = "petY";
+    private static final String PREFS_PET_SIZE = "petSize";
+    private static final String PREFS_PET_OPACITY = "petOpacity";
+    private static final String PREFS_PET_STAY = "petStayWhileRecording";
 
     private final Recorder recorder = new Recorder();
     private final Preferences prefs = Preferences.userNodeForPackage(JRecApp.class);
@@ -123,6 +128,10 @@ public class JRecApp extends Application {
     private Button latestPlay;
     private Button latestReveal;
     private Path latestFile;
+    private ComboBox<String> petSizeCombo;
+    private Slider petOpacitySlider;
+    private Label petOpacityValue;
+    private CheckBox petStayCheck;
     private Dialog<Void> settingsDialog;
     private ToggleButton regionToggle;
     private Label historyWhere;
@@ -499,7 +508,8 @@ public class JRecApp extends Application {
         dialog.setTitle("录制设置");
         dialog.setResizable(true);
 
-        VBox content = new VBox(0, soundSection(), qualitySection(), outputSection(), hotkeySection());
+        VBox content = new VBox(0, soundSection(), qualitySection(), outputSection(),
+                hotkeySection(), petSection());
         content.setPrefWidth(660);
         content.setPadding(new Insets(2, 6, 4, 6));
 
@@ -752,6 +762,90 @@ public class JRecApp extends Application {
         }
         keyHint.setVisible(true);
         keyHint.setManaged(true);
+    }
+
+    /**
+     * How the mascot looks and behaves. It sits on top of other people's work, so its size
+     * and how solid it is are the user's call, not an art direction decision.
+     */
+    private HBox petSection() {
+        petSizeCombo = new ComboBox<>(FXCollections.observableArrayList("小", "中", "大"));
+        petSizeCombo.setValue(sizeLabel(prefs.getDouble(PREFS_PET_SIZE, PetWindow.DEFAULT_HEIGHT)));
+        petSizeCombo.getStyleClass().add("combo");
+        petSizeCombo.setMaxWidth(Double.MAX_VALUE);
+        petSizeCombo.valueProperty().addListener((obs, old, value) -> {
+            if (value == null) {
+                return;
+            }
+            double pixels = sizePixels(value);
+            prefs.putDouble(PREFS_PET_SIZE, pixels);
+            if (pet != null) {
+                pet.setArtHeight(pixels);
+            }
+        });
+
+        petOpacityValue = new Label();
+        petOpacityValue.getStyleClass().add("field-note");
+
+        double current = prefs.getDouble(PREFS_PET_OPACITY, 1.0) * 100;
+        petOpacitySlider = new Slider(35, 100, current);
+        petOpacityValue.setText(Math.round(current) + "%");
+        petOpacitySlider.valueProperty().addListener((obs, old, value) -> {
+            double percent = value.doubleValue();
+            petOpacityValue.setText(Math.round(percent) + "%");
+            prefs.putDouble(PREFS_PET_OPACITY, percent / 100.0);
+            if (pet != null) {
+                pet.setArtOpacity(percent / 100.0);
+            }
+        });
+        HBox.setHgrow(petOpacitySlider, Priority.ALWAYS);
+        HBox opacityRow = new HBox(8, petOpacitySlider, petOpacityValue);
+        opacityRow.setAlignment(Pos.CENTER_LEFT);
+
+        petStayCheck = new CheckBox("录制时留在画面上");
+        petStayCheck.getStyleClass().add("check");
+        petStayCheck.setSelected(prefs.getBoolean(PREFS_PET_STAY, false));
+        petStayCheck.selectedProperty().addListener((obs, old, value) -> {
+            prefs.putBoolean(PREFS_PET_STAY, value);
+            // Unchecking mid-take should take effect now, not after the next recording.
+            if (pet != null && !value && recorder.isRecording()) {
+                pet.hide();
+            }
+        });
+
+        Label stayNote = new Label("默认在录制时隐藏；留在画面上就会录进视频");
+        stayNote.getStyleClass().add("field-note");
+
+        Button corner = new Button("回到右下角");
+        corner.getStyleClass().add("btn-ghost");
+        corner.setOnAction(e -> {
+            if (pet != null) {
+                pet.resetPosition();
+            }
+        });
+
+        GridPane grid = grid(2,
+                field("大小", petSizeCombo),
+                field("不透明度", opacityRow));
+
+        VBox body = new VBox(9, grid, petStayCheck, stayNote, corner);
+        body.setMinWidth(0);
+        return section("05", "桌宠", "PET", body, false);
+    }
+
+    private static double sizePixels(String label) {
+        return switch (label) {
+            case "小" -> 160;
+            case "大" -> 272;
+            default -> PetWindow.DEFAULT_HEIGHT;
+        };
+    }
+
+    private static String sizeLabel(double pixels) {
+        if (pixels <= 175) {
+            return "小";
+        }
+        return pixels >= 240 ? "大" : "中";
     }
 
     private VBox historySection() {
@@ -1243,10 +1337,15 @@ public class JRecApp extends Application {
     private void enterRecordingState() {
         recordingStartedAt = System.nanoTime();
         litTicks = -1;
-        // The pet would otherwise sit in the corner of every full-screen take: gdigrab has
-        // no window exclusion. The floating bar carries the stop control while it is gone.
+        // gdigrab cannot exclude a window, so by default the pet steps out of the frame.
+        // Users who want it visible while recording get the REC badge instead — and get told,
+        // in the settings, that it will be in the video.
         if (pet != null) {
-            pet.hide();
+            if (prefs.getBoolean(PREFS_PET_STAY, false)) {
+                pet.setRecordingLook(true);
+            } else {
+                pet.hide();
+            }
         }
         if (controlBar != null) {
             controlBar.setTime(0);
@@ -1312,9 +1411,12 @@ public class JRecApp extends Application {
             tick.pseudoClassStateChanged(LIT, false);
         }
         litTicks = -1;
-        if (pet != null && prefs.getBoolean(PREFS_PET, true)) {
-            pet.show(prefs.getDouble(PREFS_PET_X, Double.NaN),
-                    prefs.getDouble(PREFS_PET_Y, Double.NaN));
+        if (pet != null) {
+            pet.setRecordingLook(false);
+            if (prefs.getBoolean(PREFS_PET, true)) {
+                pet.show(prefs.getDouble(PREFS_PET_X, Double.NaN),
+                        prefs.getDouble(PREFS_PET_Y, Double.NaN));
+            }
         }
         if (controlBar != null) {
             controlBar.hide();
@@ -1463,6 +1565,9 @@ public class JRecApp extends Application {
         pet.setOnHide(() -> setPetVisible(false));
         pet.setOnQuit(Platform::exit);
         pet.setHint(hotkeySpec != null ? "点我：开始录制 · 右键更多" : "点我：开始录制");
+
+        pet.setArtHeight(prefs.getDouble(PREFS_PET_SIZE, PetWindow.DEFAULT_HEIGHT));
+        pet.setArtOpacity(prefs.getDouble(PREFS_PET_OPACITY, 1.0));
 
         boolean visible = prefs.getBoolean(PREFS_PET, true);
         if (petToggle != null) {
