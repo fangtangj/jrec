@@ -12,6 +12,7 @@ import com.rzx.jrec.core.RecordingConfig;
 import com.rzx.jrec.core.RecordingResult;
 import com.rzx.jrec.core.Rect;
 import com.rzx.jrec.desktop.ui.RegionSelector;
+import com.rzx.jrec.desktop.ui.ScreenPreview;
 import javafx.css.PseudoClass;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
@@ -26,6 +27,9 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -99,6 +103,12 @@ public class JRecApp extends Application {
     private Button recordButton;
     private Label ffmpegChip;
     private Label systemAudioHintLabel;
+    private Label deckSpec;
+    private Label deckLabel;
+    private ScreenPreview preview;
+    private Dialog<Void> settingsDialog;
+    private ToggleButton regionToggle;
+    private Label historyWhere;
 
     private Label timerLabel;
     private Label recordingFileLabel;
@@ -120,15 +130,20 @@ public class JRecApp extends Application {
     public void start(Stage primaryStage) {
         this.stage = primaryStage;
         buildUi();
-        refreshHistory();
-        probeFfmpegAsync();
 
-        Scene scene = new Scene(root, 780, 720);
+        Scene scene = new Scene(root, 920, 700);
         scene.getStylesheets().add(getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
         stage.setScene(scene);
+
+        // A Dialog binds to its owner's scene at construction time, so this has to come
+        // after setScene. Built once and reused, which keeps the controls' state.
+        settingsDialog = buildSettingsDialog();
+
+        refreshHistory();
+        probeFfmpegAsync();
         stage.setTitle("JRec — 屏幕录制");
-        stage.setMinWidth(720);
-        stage.setMinHeight(640);
+        stage.setMinWidth(820);
+        stage.setMinHeight(600);
         stage.setOnCloseRequest(e -> {
             if (recorder.isRecording()) {
                 e.consume();
@@ -143,6 +158,7 @@ public class JRecApp extends Application {
             // The icon is cosmetic; never block startup for it.
         }
         stage.show();
+        preview.start();
     }
 
     @Override
@@ -151,6 +167,9 @@ public class JRecApp extends Application {
         if (recorder.isRecording()) {
             recorder.stop();
         }
+        if (preview != null) {
+            preview.dispose();
+        }
     }
 
     // ------------------------------------------------------------------ layout
@@ -158,20 +177,23 @@ public class JRecApp extends Application {
     private void buildUi() {
         root = new StackPane();
         root.getStyleClass().add("root");
-        root.setPadding(new Insets(18, 26, 14, 26));
+        root.setPadding(new Insets(16, 24, 14, 24));
 
-        HBox history = historySection();
+        // Built up front so a recording started before the settings sheet is ever
+        // opened still reads real values instead of nulls.
+        createControls();
+
+        VBox history = historySection();
+        StackPane stagePane = previewStage();
+
         configView = new VBox(0);
         configView.getChildren().addAll(
                 header(),
-                regionSection(),
-                soundSection(),
-                qualitySection(),
-                outputSection(),
-                recordArea(),
+                stagePane,
                 history
         );
-        VBox.setVgrow(history, Priority.ALWAYS);
+        VBox.setVgrow(stagePane, Priority.ALWAYS);
+        updateRegionUi();
 
         recordingView = buildRecordingView();
         recordingView.setVisible(false);
@@ -222,76 +244,10 @@ public class JRecApp extends Application {
         return box;
     }
 
-    private HBox regionSection() {
-        modeGroup = new ToggleGroup();
-        fullScreenToggle = new ToggleButton("全屏");
-        fullScreenToggle.getStyleClass().add("seg");
-        fullScreenToggle.setToggleGroup(modeGroup);
-        fullScreenToggle.setSelected(true);
-
-        ToggleButton regionToggle = new ToggleButton("自选区域");
-        regionToggle.getStyleClass().add("seg");
-        regionToggle.setToggleGroup(modeGroup);
-
-        modeGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
-            if (sel == null) {
-                // A toggle group allows deselecting; keep one always active.
-                modeGroup.selectToggle(old);
-                return;
-            }
-            boolean isRegion = sel == regionToggle;
-            if (isRegion && region == null) {
-                pickRegion();
-                if (region == null) {
-                    modeGroup.selectToggle(fullScreenToggle);
-                    return;
-                }
-            }
-            updateRegionUi();
-        });
-
-        HBox modes = new HBox(26, fullScreenToggle, regionToggle);
-
-        regionValue = new Label("整个桌面（含全部显示器）");
-        regionValue.getStyleClass().add("readout");
-
-        pickRegionButton = new Button("重新框选");
-        pickRegionButton.getStyleClass().add("btn-ghost");
-        pickRegionButton.setOnAction(e -> {
-            pickRegion();
-            if (region != null) {
-                modeGroup.selectToggle(regionToggle);
-            }
-        });
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        HBox body = new HBox(12, modes, spacer, regionValue, pickRegionButton);
-        body.setAlignment(Pos.CENTER_LEFT);
-        return section("01", "录制范围", "CAPTURE", body, false);
-    }
-
-    private HBox soundSection() {
+    private void createControls() {
         micCombo = audioCombo();
         systemCombo = audioCombo();
 
-        GridPane grid = grid(2,
-                field("麦克风", micCombo),
-                field("系统声音", systemCombo));
-
-        systemAudioHintLabel = new Label();
-        systemAudioHintLabel.getStyleClass().add("warn-link");
-        systemAudioHintLabel.setVisible(false);
-        systemAudioHintLabel.setManaged(false);
-        systemAudioHintLabel.setOnMouseClicked(e -> showSystemAudioHint());
-
-        VBox body = new VBox(9, grid, systemAudioHintLabel);
-        body.setMinWidth(0);
-        return section("02", "声音", "AUDIO", body, false);
-    }
-
-    private HBox qualitySection() {
         fpsCombo = new ComboBox<>(FXCollections.observableArrayList(15, 24, 30, 60));
         fpsCombo.setValue(30);
         fpsCombo.getStyleClass().add("combo");
@@ -318,18 +274,170 @@ public class JRecApp extends Application {
             }
         });
 
+        dirField = new TextField(defaultOutputDir().toString());
+        dirField.getStyleClass().add("text-field");
+        dirField.setMinWidth(0);
+        HBox.setHgrow(dirField, Priority.ALWAYS);
+
         for (ComboBox<?> combo : List.of(micCombo, systemCombo, fpsCombo, qualityCombo, encoderCombo)) {
-            // Without this a combo refuses to shrink and the row overflows its column.
+            // Without this a combo refuses to shrink and its row overflows.
             combo.setMinWidth(0);
             combo.setMaxWidth(Double.MAX_VALUE);
         }
+    }
 
+    /**
+     * The whole window is a viewfinder with the transport bar lying on top of it.
+     * <p>
+     * The previous layout was a settings form: five labelled rows, eight controls,
+     * nothing to look at. This one shows the screen you are about to capture, which
+     * is both the thing a recorder should be and the thing the product page promised
+     * when it said "nothing else".
+     */
+    private StackPane previewStage() {
+        preview = new ScreenPreview();
+
+        HBox pills = modePills();
+        StackPane.setAlignment(pills, Pos.TOP_RIGHT);
+        StackPane.setMargin(pills, new Insets(10));
+
+        HBox deck = deck();
+        StackPane.setAlignment(deck, Pos.BOTTOM_CENTER);
+
+        StackPane stagePane = new StackPane(preview, pills, deck);
+        stagePane.getStyleClass().add("stage");
+        stagePane.setMinHeight(0);
+        return stagePane;
+    }
+
+    private HBox modePills() {
+        modeGroup = new ToggleGroup();
+        fullScreenToggle = new ToggleButton("全屏");
+        fullScreenToggle.getStyleClass().add("pill");
+        fullScreenToggle.setToggleGroup(modeGroup);
+        fullScreenToggle.setSelected(true);
+
+        regionToggle = new ToggleButton("自选区域");
+        regionToggle.getStyleClass().add("pill");
+        regionToggle.setToggleGroup(modeGroup);
+
+        modeGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
+            if (sel == null) {
+                // A toggle group allows deselecting; keep one always active.
+                modeGroup.selectToggle(old);
+                return;
+            }
+            boolean isRegion = sel == regionToggle;
+            if (isRegion && region == null) {
+                pickRegion();
+                if (region == null) {
+                    modeGroup.selectToggle(fullScreenToggle);
+                    return;
+                }
+            }
+            updateRegionUi();
+        });
+
+        HBox pills = new HBox(8, fullScreenToggle, regionToggle);
+        pills.setAlignment(Pos.CENTER_RIGHT);
+        pills.setMaxHeight(Region.USE_PREF_SIZE);
+        return pills;
+    }
+
+    /** The transport bar: one round key, a readout, and the way into settings. */
+    private HBox deck() {
+        recordButton = new Button();
+        recordButton.getStyleClass().add("rec-circle");
+        recordButton.setOnAction(e -> startRecording());
+
+        deckLabel = new Label("开始录制");
+        deckLabel.getStyleClass().add("deck-label");
+
+        deckSpec = new Label();
+        deckSpec.getStyleClass().add("deck-spec");
+
+        VBox texts = new VBox(3, deckLabel, deckSpec);
+        texts.setAlignment(Pos.CENTER_LEFT);
+
+        pickRegionButton = new Button("重新框选");
+        pickRegionButton.getStyleClass().add("btn-ghost");
+        pickRegionButton.setOnAction(e -> {
+            pickRegion();
+            if (region != null) {
+                modeGroup.selectToggle(regionToggle);
+            }
+        });
+        pickRegionButton.setVisible(false);
+        pickRegionButton.setManaged(false);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button settings = new Button("设置");
+        settings.getStyleClass().add("btn-ghost");
+        settings.setOnAction(e -> settingsDialog.showAndWait());
+
+        HBox bar = new HBox(14, recordButton, texts, spacer, pickRegionButton, settings);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.getStyleClass().add("deck");
+        bar.setMaxWidth(Double.MAX_VALUE);
+        bar.setMaxHeight(Region.USE_PREF_SIZE);
+        return bar;
+    }
+
+    /**
+     * Every setting lives here rather than on the main screen. Built once and reused so
+     * the controls keep their state and never have to be re-parented.
+     */
+    private Dialog<Void> buildSettingsDialog() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("录制设置");
+        dialog.setResizable(true);
+
+        VBox content = new VBox(0, soundSection(), qualitySection(), outputSection());
+        content.setPrefWidth(660);
+        content.setPadding(new Insets(2, 6, 4, 6));
+
+        DialogPane pane = dialog.getDialogPane();
+        pane.getStyleClass().add("settings-pane");
+        pane.setContent(content);
+        pane.getButtonTypes().add(ButtonType.CLOSE);
+        pane.getStylesheets().add(
+                getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
+
+        dialog.setOnHidden(e -> {
+            prefs.put(PREFS_DIR, dirField.getText());
+            prefs.put(PREFS_QUALITY, qualityCombo.getValue());
+            refreshHistory();
+            updateDeckSpec();
+        });
+        return dialog;
+    }
+
+    private HBox soundSection() {
+        GridPane grid = grid(2,
+                field("麦克风", micCombo),
+                field("系统声音", systemCombo));
+
+        systemAudioHintLabel = new Label();
+        systemAudioHintLabel.getStyleClass().add("warn-link");
+        systemAudioHintLabel.setVisible(false);
+        systemAudioHintLabel.setManaged(false);
+        systemAudioHintLabel.setOnMouseClicked(e -> showSystemAudioHint());
+
+        VBox body = new VBox(9, grid, systemAudioHintLabel);
+        body.setMinWidth(0);
+        return section("01", "声音", "AUDIO", body, false);
+    }
+
+    private HBox qualitySection() {
         GridPane grid = grid(3,
                 field("帧率", fpsCombo),
                 field("画质", qualityCombo),
                 field("编码器", encoderCombo));
         grid.setMinWidth(0);
-        return section("03", "画质", "ENCODE", grid, false);
+        return section("02", "画质", "ENCODE", grid, false);
     }
 
     private void showSystemAudioHint() {
@@ -347,11 +455,6 @@ public class JRecApp extends Application {
     }
 
     private HBox outputSection() {
-        dirField = new TextField(defaultOutputDir().toString());
-        dirField.getStyleClass().add("text-field");
-        dirField.setMinWidth(0);
-        HBox.setHgrow(dirField, Priority.ALWAYS);
-
         Button browse = new Button("浏览…");
         browse.getStyleClass().add("btn-ghost");
         browse.setOnAction(e -> {
@@ -364,8 +467,6 @@ public class JRecApp extends Application {
             File chosen = chooser.showDialog(stage);
             if (chosen != null) {
                 dirField.setText(chosen.getAbsolutePath());
-                prefs.put(PREFS_DIR, chosen.getAbsolutePath());
-                refreshHistory();
             }
         });
 
@@ -375,49 +476,36 @@ public class JRecApp extends Application {
 
         HBox body = new HBox(9, dirField, browse, openDir);
         body.setAlignment(Pos.CENTER_LEFT);
-        return section("04", "保存位置", "OUTPUT", body, false);
+        return section("03", "保存位置", "OUTPUT", body, false);
     }
 
-    private VBox recordArea() {
-        recordButton = new Button("开始录制");
-        recordButton.getStyleClass().add("btn-record");
-        // Fixed width on purpose: a full-bleed bar turned the one accent colour into a
-        // background wash. Sized like a physical key, it stays the thing the eye lands on.
-        recordButton.setPrefWidth(300);
-        recordButton.setMinWidth(240);
-        recordButton.setOnAction(e -> startRecording());
+    private VBox historySection() {
+        Label cap = new Label("最近录制");
+        cap.getStyleClass().add("sec-cap");
 
-        Label spec = new Label("MP4 · H.264 · AAC · 可直接播放");
-        spec.getStyleClass().add("hint");
+        historyWhere = new Label();
+        historyWhere.getStyleClass().add("file-meta");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox row = new HBox(16, recordButton, spacer, spec);
-        row.setAlignment(Pos.CENTER_LEFT);
+        HBox head = new HBox(10, cap, spacer, historyWhere);
+        head.setAlignment(Pos.BASELINE_LEFT);
 
-        VBox body = new VBox(row);
-        body.setPadding(new Insets(16, 0, 16, 0));
-        return body;
-    }
-
-    private HBox historySection() {
         historyBox = new VBox(0);
-
         ScrollPane scroll = new ScrollPane(historyBox);
         scroll.getStyleClass().add("history-scroll");
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        // A VBox child only takes leftover vertical space when its max height allows it.
-        scroll.setMaxHeight(Double.MAX_VALUE);
+        scroll.setMinHeight(0);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        HBox sec = section("05", "最近录制", "HISTORY", scroll, true);
-        sec.getStyleClass().add("sec-end");
-        sec.setMaxHeight(Double.MAX_VALUE);
-        VBox.setVgrow(sec, Priority.ALWAYS);
-        return sec;
+        VBox box = new VBox(6, head, scroll);
+        box.setMinHeight(96);
+        box.setPrefHeight(146);
+        box.setMaxHeight(200);
+        return box;
     }
 
     private VBox buildRecordingView() {
@@ -562,12 +650,28 @@ public class JRecApp extends Application {
     }
 
     private void updateRegionUi() {
-        if (modeGroup.getSelectedToggle() == fullScreenToggle || region == null) {
-            regionValue.setText("整个桌面（含全部显示器）");
+        boolean useRegion = modeGroup.getSelectedToggle() != fullScreenToggle && region != null;
+        if (preview != null) {
+            preview.setArea(useRegion ? region : null);
+        }
+        if (pickRegionButton != null) {
+            pickRegionButton.setVisible(useRegion);
+            pickRegionButton.setManaged(useRegion);
+        }
+        updateDeckSpec();
+    }
+
+    /** Keeps the transport readout honest about what the next take will contain. */
+    private void updateDeckSpec() {
+        if (deckSpec == null || modeGroup == null) {
             return;
         }
-        regionValue.setText(region.width() + " × " + region.height()
-                + "  @ (" + region.x() + ", " + region.y() + ")");
+        boolean useRegion = modeGroup.getSelectedToggle() != fullScreenToggle && region != null;
+        String area = useRegion ? region.width() + " × " + region.height() : "全屏";
+        Object fps = fpsCombo == null ? null : fpsCombo.getValue();
+        AudioChoice mic = micCombo == null ? null : micCombo.getValue();
+        String audio = mic == null || mic.device() == null ? "无声音" : "麦克风";
+        deckSpec.setText(area + " · " + (fps == null ? 30 : fps) + " fps · " + audio);
     }
 
     private void startRecording() {
@@ -667,13 +771,13 @@ public class JRecApp extends Application {
         ffmpegChip.setText("缺少 FFmpeg");
         ffmpegChip.getStyleClass().setAll("chip", "chip-warn");
         recordButton.setDisable(true);
-        recordButton.setText("下载 FFmpeg 后即可录制");
+        deckLabel.setText("下载 FFmpeg 后即可录制");
         recordButton.setOnAction(e -> downloadFfmpeg());
     }
 
     private void downloadFfmpeg() {
         recordButton.setDisable(true);
-        recordButton.setText("正在下载…");
+        deckLabel.setText("正在下载…");
         CompletableFuture.runAsync(() -> FfmpegDownloader.install(new FfmpegDownloader.ProgressListener() {
             @Override
             public void onProgress(long downloaded, long total) {
@@ -682,7 +786,7 @@ public class JRecApp extends Application {
                         : "正在下载…";
                 Platform.runLater(() -> {
                     ffmpegChip.setText(text);
-                    recordButton.setText(text);
+                    deckLabel.setText(text);
                 });
             }
 
@@ -694,14 +798,14 @@ public class JRecApp extends Application {
             ffmpegChip.getStyleClass().setAll("chip", "chip-ok");
             ffmpegChip.setText("FFmpeg 就绪");
             recordButton.setDisable(false);
-            recordButton.setText("开始录制");
+            deckLabel.setText("开始录制");
             recordButton.setOnAction(e -> startRecording());
             loadOptionsAsync();
             toast("FFmpeg 安装完成", false);
         })).exceptionally(t -> {
             Platform.runLater(() -> {
                 recordButton.setDisable(false);
-                recordButton.setText("重试下载 FFmpeg");
+                deckLabel.setText("重试下载 FFmpeg");
                 toast(t.getCause() == null ? t.getMessage() : t.getCause().getMessage(), true);
             });
             return null;
@@ -744,7 +848,7 @@ public class JRecApp extends Application {
             case "h264_nvenc" -> "NVIDIA 硬件编码";
             case "h264_qsv" -> "Intel 硬件编码";
             case "h264_amf" -> "AMD 硬件编码";
-            default -> "x264 软件编码（兼容性最好）";
+            default -> "x264 软件编码";
         };
     }
 
@@ -848,6 +952,9 @@ public class JRecApp extends Application {
     private void enterRecordingState() {
         recordingStartedAt = System.nanoTime();
         litTicks = -1;
+        if (preview != null) {
+            preview.pause();
+        }
         configView.setVisible(false);
         configView.setManaged(false);
         recordingView.setVisible(true);
@@ -900,6 +1007,9 @@ public class JRecApp extends Application {
             tick.pseudoClassStateChanged(LIT, false);
         }
         litTicks = -1;
+        if (preview != null) {
+            preview.start();
+        }
         recordingView.setVisible(false);
         recordingView.setManaged(false);
         configView.setVisible(true);
@@ -913,6 +1023,9 @@ public class JRecApp extends Application {
     private void refreshHistory() {
         historyBox.getChildren().clear();
         Path dir = Path.of(dirField.getText());
+        if (historyWhere != null) {
+            historyWhere.setText(shortPath(dir));
+        }
         List<Path> files = listRecordings(dir);
         if (files.isEmpty()) {
             Label empty = new Label("还没有录制文件");
@@ -972,6 +1085,15 @@ public class JRecApp extends Application {
                                 + " · " + humanSize(info.sizeBytes()))))
                 .exceptionally(t -> null);
         return row;
+    }
+
+    /** Last two path segments, so a long destination fits on one line. */
+    private static String shortPath(Path path) {
+        int n = path.getNameCount();
+        if (n <= 2) {
+            return path.toString();
+        }
+        return "…" + File.separator + path.getName(n - 2) + File.separator + path.getName(n - 1);
     }
 
     private static String humanSize(long bytes) {

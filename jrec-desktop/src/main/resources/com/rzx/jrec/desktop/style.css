@@ -303,6 +303,147 @@
     -fx-border-color: #E2400F;
 }
 
+
+/* ══════════════ viewfinder stage ══════════════ */
+
+.stage {
+    -fx-background-color: #0D0B08;
+    -fx-background-radius: 6;
+    -fx-border-color: #2A2620;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 1;
+}
+
+.viewfinder {
+    -fx-background-color: #0B0A07;
+    -fx-background-radius: 5;
+}
+
+.vf-chip {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #C9C3B4;
+    -fx-background-color: rgba(11, 10, 7, 0.74);
+    -fx-background-radius: 3;
+    -fx-padding: 3 8 3 8;
+}
+
+.vf-live {
+    -fx-font-family: "Bahnschrift";
+    -fx-font-size: 9px;
+    -fx-text-fill: #FF8B6E;
+    -fx-background-color: rgba(11, 10, 7, 0.74);
+    -fx-background-radius: 3;
+    -fx-padding: 3 8 3 8;
+}
+
+.vf-corner {
+    -fx-border-color: rgba(226, 64, 15, 0.62);
+    -fx-border-width: 0;
+}
+
+.vf-corner.tl { -fx-border-width: 1 0 0 1; }
+.vf-corner.tr { -fx-border-width: 1 1 0 0; }
+.vf-corner.bl { -fx-border-width: 0 0 1 1; }
+.vf-corner.br { -fx-border-width: 0 1 1 0; }
+
+/* ══════════════ mode pills over the preview ══════════════ */
+
+.pill {
+    -fx-background-color: rgba(14, 12, 9, 0.80);
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(255, 255, 255, 0.12);
+    -fx-border-width: 1;
+    -fx-text-fill: #B6B0A1;
+    -fx-font-size: 11px;
+    -fx-padding: 5 13 5 13;
+    -fx-cursor: hand;
+}
+
+.pill:hover {
+    -fx-text-fill: #F7F4EC;
+    -fx-border-color: rgba(255, 255, 255, 0.26);
+}
+
+.pill:selected {
+    -fx-background-color: rgba(226, 64, 15, 0.94);
+    -fx-border-color: #FF6A32;
+    -fx-text-fill: #FFF6F0;
+}
+
+/* ══════════════ transport deck ══════════════ */
+
+.deck {
+    -fx-background-color: linear-gradient(to top,
+        rgba(8, 7, 5, 0.96) 0%,
+        rgba(8, 7, 5, 0.84) 52%,
+        rgba(8, 7, 5, 0.0) 100%);
+    -fx-padding: 40 18 14 16;
+}
+
+.deck-label {
+    -fx-font-size: 14.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #F7F4EC;
+}
+
+.deck-spec {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #8B8779;
+}
+
+.rec-circle {
+    -fx-min-width: 54;
+    -fx-min-height: 54;
+    -fx-pref-width: 54;
+    -fx-pref-height: 54;
+    -fx-max-width: 54;
+    -fx-max-height: 54;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(255, 244, 238, 0.60);
+    -fx-border-width: 3;
+    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.48), 18, 0.2, 0, 4);
+    -fx-cursor: hand;
+}
+
+.rec-circle:hover {
+    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
+    -fx-effect: dropshadow(gaussian, rgba(255, 90, 34, 0.62), 24, 0.25, 0, 5);
+}
+
+.rec-circle:pressed {
+    -fx-translate-y: 1;
+    -fx-effect: none;
+}
+
+.rec-circle:disabled {
+    -fx-opacity: 0.42;
+    -fx-effect: none;
+}
+
+/* ══════════════ settings sheet ══════════════ */
+
+.settings-pane {
+    -fx-background-color: #100E09;
+}
+
+.settings-pane > .content {
+    -fx-padding: 4 10 2 10;
+}
+
+.settings-pane .button-bar .button {
+    -fx-background-color: #2A2620;
+    -fx-text-fill: #D6D0C2;
+    -fx-background-radius: 3;
+    -fx-padding: 6 18 6 18;
+    -fx-cursor: hand;
+}
+
 /* ══════════════ recording state ══════════════ */
 
 .rec-card {
