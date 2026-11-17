@@ -377,8 +377,8 @@
 
 .deck {
     -fx-background-color: linear-gradient(to top,
-        rgba(8, 7, 5, 0.96) 0%,
-        rgba(8, 7, 5, 0.84) 52%,
+        rgba(8, 7, 5, 0.97) 0%,
+        rgba(8, 7, 5, 0.92) 55%,
         rgba(8, 7, 5, 0.0) 100%);
     -fx-padding: 40 18 14 16;
 }
@@ -424,6 +424,78 @@
 .rec-circle:disabled {
     -fx-opacity: 0.42;
     -fx-effect: none;
+}
+
+
+/* ══════════════ floating control bar ══════════════ */
+
+.bar-root {
+    -fx-background-color: rgba(16, 14, 10, 0.94);
+    -fx-background-radius: 9;
+    -fx-border-color: #3E3729;
+    -fx-border-radius: 9;
+    -fx-border-width: 1;
+    -fx-padding: 9 12 9 14;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.62), 26, 0.2, 0, 8);
+    -fx-cursor: move;
+}
+
+.bar-time {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 14px;
+    -fx-text-fill: #F7F4EC;
+}
+
+.bar-stop {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+    -fx-padding: 3 7 3 7;
+    -fx-cursor: hand;
+}
+
+.bar-stop:hover {
+    -fx-background-color: rgba(226, 64, 15, 0.22);
+}
+
+.bar-stop-mark {
+    -fx-min-width: 11;
+    -fx-min-height: 11;
+    -fx-pref-width: 11;
+    -fx-pref-height: 11;
+    -fx-max-width: 11;
+    -fx-max-height: 11;
+    -fx-background-color: #E2400F;
+    -fx-background-radius: 2;
+}
+
+.bar-close {
+    -fx-background-color: transparent;
+    -fx-text-fill: #7E7969;
+    -fx-font-size: 13px;
+    -fx-padding: 0 4 2 4;
+    -fx-cursor: hand;
+}
+
+.bar-close:hover {
+    -fx-text-fill: #F7F4EC;
+}
+
+/* the shortcut, printed where the action is */
+.key-hint {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9px;
+    -fx-text-fill: #8B8779;
+    -fx-background-color: rgba(20, 18, 12, 0.72);
+    -fx-background-radius: 3;
+    -fx-border-color: #2E2A22;
+    -fx-border-radius: 3;
+    -fx-border-width: 1;
+    -fx-padding: 3 7 3 7;
+}
+
+.key-hint-off {
+    -fx-text-fill: #D29A55;
+    -fx-border-color: #41331F;
 }
 
 /* ══════════════ settings sheet ══════════════ */

@@ -25,6 +25,13 @@
       <artifactId>javafx-controls</artifactId>
       <version>${javafx.version}</version>
     </dependency>
+    <!-- Global hotkeys need a Win32 call; the JDK has no API for it. Kept out of
+         jrec-core on purpose: the recording engine stays dependency-free and testable. -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna-platform</artifactId>
+      <version>5.14.0</version>
+    </dependency>
   </dependencies>
 
   <build>

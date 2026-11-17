@@ -11,8 +11,12 @@ import com.rzx.jrec.core.RecorderListener;
 import com.rzx.jrec.core.RecordingConfig;
 import com.rzx.jrec.core.RecordingResult;
 import com.rzx.jrec.core.Rect;
+import com.rzx.jrec.core.RecorderState;
 import com.rzx.jrec.desktop.ui.RegionSelector;
+import com.rzx.jrec.desktop.ui.ControlBar;
 import com.rzx.jrec.desktop.ui.ScreenPreview;
+import com.rzx.jrec.desktop.hotkey.GlobalHotkey;
+import com.rzx.jrec.desktop.hotkey.Hotkeys;
 import javafx.css.PseudoClass;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
@@ -109,6 +113,9 @@ public class JRecApp extends Application {
     private Dialog<Void> settingsDialog;
     private ToggleButton regionToggle;
     private Label historyWhere;
+    private Label keyHint;
+    private ControlBar controlBar;
+    private GlobalHotkey hotkey;
 
     private Label timerLabel;
     private Label recordingFileLabel;
@@ -159,6 +166,15 @@ public class JRecApp extends Application {
         }
         stage.show();
         preview.start();
+
+        // Registration talks to the OS and can block briefly, so it does not run on the
+        // FX thread. A taken combination must degrade to the button, not break startup.
+        new Thread(() -> {
+            GlobalHotkey created = Hotkeys.create();
+            boolean bound = created.register(() -> Platform.runLater(this::toggleRecording));
+            this.hotkey = created;
+            Platform.runLater(() -> showHotkeyHint(bound, created));
+        }, "jrec-hotkey-init").start();
     }
 
     @Override
@@ -169,6 +185,12 @@ public class JRecApp extends Application {
         }
         if (preview != null) {
             preview.dispose();
+        }
+        if (controlBar != null) {
+            controlBar.hide();
+        }
+        if (hotkey != null) {
+            hotkey.close();
         }
     }
 
@@ -182,6 +204,7 @@ public class JRecApp extends Application {
         // Built up front so a recording started before the settings sheet is ever
         // opened still reads real values instead of nulls.
         createControls();
+        controlBar = new ControlBar();
 
         VBox history = historySection();
         StackPane stagePane = previewStage();
@@ -373,11 +396,16 @@ public class JRecApp extends Application {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        keyHint = new Label();
+        keyHint.getStyleClass().add("key-hint");
+        keyHint.setVisible(false);
+        keyHint.setManaged(false);
+
         Button settings = new Button("设置");
         settings.getStyleClass().add("btn-ghost");
         settings.setOnAction(e -> settingsDialog.showAndWait());
 
-        HBox bar = new HBox(14, recordButton, texts, spacer, pickRegionButton, settings);
+        HBox bar = new HBox(14, recordButton, texts, spacer, pickRegionButton, keyHint, settings);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("deck");
         bar.setMaxWidth(Double.MAX_VALUE);
@@ -674,6 +702,31 @@ public class JRecApp extends Application {
         deckSpec.setText(area + " · " + (fps == null ? 30 : fps) + " fps · " + audio);
     }
 
+    /** What the global shortcut does: one key, either direction. */
+    private void toggleRecording() {
+        RecorderState state = recorder.state();
+        if (state == RecorderState.RECORDING) {
+            stopRecording();
+        } else if (state == RecorderState.IDLE || state == RecorderState.FAILED) {
+            startRecording();
+        }
+        // STARTING / STOPPING: a transition is already in flight; ignore the press.
+    }
+
+    private void showHotkeyHint(boolean bound, GlobalHotkey impl) {
+        if (keyHint == null) {
+            return;
+        }
+        if (bound) {
+            keyHint.setText(impl.label());
+        } else {
+            keyHint.setText(impl.isSupported() ? "快捷键被占用" : "无全局快捷键");
+            keyHint.getStyleClass().add("key-hint-off");
+        }
+        keyHint.setVisible(true);
+        keyHint.setManaged(true);
+    }
+
     private void startRecording() {
         RecordingConfig config;
         try {
@@ -831,6 +884,9 @@ public class JRecApp extends Application {
             if (!choices.isEmpty()) {
                 encoderCombo.setValue(choices.get(0));
             }
+            // The readout was first computed before devices existed, so it said "无声音"
+            // even with a microphone selected. Recompute now that the combos are filled.
+            updateDeckSpec();
         })).exceptionally(t -> {
             Platform.runLater(() -> toast("枚举设备失败：" + t.getMessage(), true));
             return null;
@@ -955,6 +1011,14 @@ public class JRecApp extends Application {
         if (preview != null) {
             preview.pause();
         }
+        if (controlBar != null) {
+            controlBar.setTime(0);
+            controlBar.showFor(this::stopRecording);
+        }
+        // Getting the window out of the frame is the whole point of the bar.
+        if (stage != null) {
+            stage.setIconified(true);
+        }
         configView.setVisible(false);
         configView.setManaged(false);
         recordingView.setVisible(true);
@@ -980,6 +1044,10 @@ public class JRecApp extends Application {
         wallClock = new Timeline(new KeyFrame(Duration.millis(200), e -> {
             long seconds = (System.nanoTime() - recordingStartedAt) / 1_000_000_000L;
             timerLabel.setText(String.format("%02d:%02d", seconds / 60, seconds % 60));
+
+            if (controlBar != null && controlBar.isShowing()) {
+                controlBar.setTime(seconds);
+            }
 
             int lit = (int) (seconds % 30);
             if (lit != litTicks) {
@@ -1009,6 +1077,13 @@ public class JRecApp extends Application {
         litTicks = -1;
         if (preview != null) {
             preview.start();
+        }
+        if (controlBar != null) {
+            controlBar.hide();
+        }
+        if (stage != null) {
+            stage.setIconified(false);
+            stage.toFront();
         }
         recordingView.setVisible(false);
         recordingView.setManaged(false);
