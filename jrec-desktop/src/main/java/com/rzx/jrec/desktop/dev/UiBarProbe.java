@@ -12,20 +12,21 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import javax.imageio.ImageIO;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Developer utility: proves the global shortcut was accepted by the OS and captures the
- * floating bar.
+ * Developer utility: verifies the global shortcut end to end and captures the bar.
  * <p>
- * The shortcut cannot be pressed programmatically — {@code RegisterHotKey} hands the
- * combination to the window manager, not to the process. What can be checked is that
- * registration succeeded (which is what the in-app hint reflects) and that the bar
- * appears with a live timer when a recording starts.
+ * Registering a combination and it actually firing are different claims, so this probe
+ * does not call the handler — it reads whichever combination the app bound, types it with
+ * {@code java.awt.Robot}, and checks the recorder's own state changed. Pressing it twice
+ * proves both directions.
  * <p>
  * Not part of the product.
  */
@@ -41,33 +42,26 @@ public class UiBarProbe extends Application {
         }
 
         after(Duration.seconds(5), () -> {
-            System.out.println("[probe] 快捷键提示 = " + labelText(app, "keyHint"));
-            try {
-                invoke(app, "startRecording");
-                System.out.println("[probe] 录制已启动");
-            } catch (Exception e) {
-                System.out.println("[probe] 启动失败：" + e);
-                Platform.exit();
-                return;
-            }
+            String hint = labelText(app, "keyHint");
+            System.out.println("[probe] 绑定的快捷键 = " + hint);
+            System.out.println("[probe] 已发送按键 = " + pressCombo(hint));
 
             after(Duration.seconds(3), () -> {
+                System.out.println("[probe] 按一次后 录制中 = " + isRecording(app));
+                System.out.println("[probe] 按一次后 悬浮条显示 = " + barShowing(app));
+                System.out.println("[probe] 按一次后 主窗口最小化 = " + stage.isIconified());
+
                 ControlBar bar = field(app, "controlBar", ControlBar.class);
-                System.out.println("[probe] 悬浮条显示中 = " + (bar != null && bar.isShowing()));
-                System.out.println("[probe] 主窗口最小化 = " + stage.isIconified());
                 if (bar != null && bar.isShowing()) {
                     snapshot(bar.stage(), "docs/screenshot-bar.png");
                 }
 
-                try {
-                    invoke(app, "stopRecording");
-                } catch (Exception e) {
-                    System.out.println("[probe] 停止失败：" + e);
-                }
+                System.out.println("[probe] 已再次发送按键 = " + pressCombo(hint));
 
                 after(Duration.seconds(6), () -> {
-                    System.out.println("[probe] 停止后悬浮条显示中 = " + (bar != null && bar.isShowing()));
-                    System.out.println("[probe] 停止后主窗口最小化 = " + stage.isIconified());
+                    System.out.println("[probe] 按两次后 录制中 = " + isRecording(app));
+                    System.out.println("[probe] 按两次后 悬浮条显示 = " + barShowing(app));
+                    System.out.println("[probe] 按两次后 主窗口最小化 = " + stage.isIconified());
                     Platform.exit();
                 });
             });
@@ -80,12 +74,71 @@ public class UiBarProbe extends Application {
         pause.play();
     }
 
+    private static boolean isRecording(JRecApp app) {
+        Object recorder = field(app, "recorder", Object.class);
+        if (recorder == null) {
+            return false;
+        }
+        try {
+            return (Boolean) recorder.getClass().getMethod("isRecording").invoke(recorder);
+        } catch (ReflectiveOperationException e) {
+            return false;
+        }
+    }
+
+    private static boolean barShowing(JRecApp app) {
+        ControlBar bar = field(app, "controlBar", ControlBar.class);
+        return bar != null && bar.isShowing();
+    }
+
+    /** Parses a label like "Ctrl+Alt+S" and types it for real. */
+    private static boolean pressCombo(String label) {
+        if (label == null || label.contains("无") || label.contains("占用")) {
+            return false;
+        }
+        List<Integer> modifiers = new ArrayList<>();
+        int key = -1;
+        for (String raw : label.split("\\+")) {
+            String token = raw.trim();
+            switch (token) {
+                case "Ctrl" -> modifiers.add(KeyEvent.VK_CONTROL);
+                case "Alt" -> modifiers.add(KeyEvent.VK_ALT);
+                case "Shift" -> modifiers.add(KeyEvent.VK_SHIFT);
+                default -> {
+                    if (token.length() == 1 && Character.isLetter(token.charAt(0))) {
+                        key = KeyEvent.VK_A + (Character.toUpperCase(token.charAt(0)) - 'A');
+                    } else if (token.startsWith("F")) {
+                        key = KeyEvent.VK_F1 + (Integer.parseInt(token.substring(1)) - 1);
+                    }
+                }
+            }
+        }
+        if (key < 0) {
+            return false;
+        }
+        try {
+            java.awt.Robot robot = new java.awt.Robot();
+            for (int m : modifiers) {
+                robot.keyPress(m);
+            }
+            robot.keyPress(key);
+            robot.keyRelease(key);
+            for (int i = modifiers.size() - 1; i >= 0; i--) {
+                robot.keyRelease(modifiers.get(i));
+            }
+            return true;
+        } catch (Throwable t) {
+            System.out.println("[probe] 无法模拟按键：" + t);
+            return false;
+        }
+    }
+
     private static String labelText(JRecApp app, String fieldName) {
         try {
             Field field = JRecApp.class.getDeclaredField(fieldName);
             field.setAccessible(true);
             Label label = (Label) field.get(app);
-            return label == null ? "<null>" : label.getText() + (label.isVisible() ? "" : " (隐藏)");
+            return label == null ? "<null>" : label.getText();
         } catch (ReflectiveOperationException e) {
             return "<读取失败:" + e + ">";
         }
@@ -100,12 +153,6 @@ public class UiBarProbe extends Application {
         } catch (ReflectiveOperationException e) {
             return null;
         }
-    }
-
-    private static void invoke(JRecApp app, String methodName) throws Exception {
-        Method method = JRecApp.class.getDeclaredMethod(methodName);
-        method.setAccessible(true);
-        method.invoke(app);
     }
 
     private static void snapshot(Stage target, String path) {
