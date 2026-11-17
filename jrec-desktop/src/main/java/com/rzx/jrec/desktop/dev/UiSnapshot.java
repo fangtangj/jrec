@@ -4,6 +4,7 @@ import com.rzx.jrec.desktop.JRecApp;
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.scene.control.TextField;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.stage.Stage;
@@ -13,6 +14,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 /**
  * Developer utility: renders the real window off-screen and writes it to a PNG.
@@ -28,6 +31,15 @@ public class UiSnapshot extends Application {
 
     private static final Duration SETTLE = Duration.seconds(6);
 
+    /**
+     * Screenshots end up in a public repository, and the real save directory contains
+     * the machine's account name and the working session folder. Showing that is both
+     * noisy and needlessly personal, so the capture uses a neutral, plausible path.
+     */
+    private static final String DOC_OUTPUT_PATH = "C:" + java.io.File.separator + "Users"
+            + java.io.File.separator + "Public" + java.io.File.separator + "Videos"
+            + java.io.File.separator + "JRec";
+
     @Override
     public void start(Stage stage) {
         JRecApp app = new JRecApp();
@@ -36,6 +48,8 @@ public class UiSnapshot extends Application {
         } catch (Exception e) {
             throw new IllegalStateException("无法启动主界面", e);
         }
+
+        applyDocOutputPath(app);
 
         // Device and encoder discovery are asynchronous; snapshot only once the
         // layout has stopped changing, otherwise the combos render empty.
@@ -50,6 +64,20 @@ public class UiSnapshot extends Application {
             }
         });
         settle.play();
+    }
+
+    private void applyDocOutputPath(JRecApp app) {
+        try {
+            Field field = JRecApp.class.getDeclaredField("dirField");
+            field.setAccessible(true);
+            ((TextField) field.get(app)).setText(DOC_OUTPUT_PATH);
+
+            Method refresh = JRecApp.class.getDeclaredMethod("refreshHistory");
+            refresh.setAccessible(true);
+            refresh.invoke(app);
+        } catch (ReflectiveOperationException e) {
+            System.out.println("无法设置文档用输出路径：" + e);
+        }
     }
 
     private void write(Stage stage) throws IOException {

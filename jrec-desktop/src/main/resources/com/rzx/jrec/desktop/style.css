@@ -294,9 +294,10 @@
     -fx-text-fill: #F4F1E9;
 }
 
-.rec-caption {
-    -fx-font-size: 11px;
-    -fx-text-fill: #7E7969;
+.rec-spec {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #8B8779;
 }
 
 .rec-file {

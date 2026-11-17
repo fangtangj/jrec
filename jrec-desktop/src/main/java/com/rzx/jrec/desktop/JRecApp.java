@@ -408,8 +408,8 @@ public class JRecApp extends Application {
         timerLabel = new Label("00:00");
         timerLabel.getStyleClass().add("timer");
 
-        recordingCaption = new Label("停止后自动保存为 MP4");
-        recordingCaption.getStyleClass().add("rec-caption");
+        recordingCaption = new Label("全屏 · 30 fps · libx264");
+        recordingCaption.getStyleClass().add("rec-spec");
 
         recordingFileLabel = new Label();
         recordingFileLabel.getStyleClass().add("rec-file");
@@ -783,14 +783,20 @@ public class JRecApp extends Application {
         configView.setManaged(false);
         recordingView.setVisible(true);
         recordingView.setManaged(true);
-        recordingCaption.setText("停止后自动保存为 MP4");
-        if (recorder.config() != null) {
-            recordingFileLabel.setText(recorder.config().outputPath().getFileName().toString());
+        RecordingConfig active = recorder.config();
+        if (active != null) {
+            // Show what is actually being produced, not a reassurance the user can see
+            // for themselves. A recorder should tell you the frame size while it runs.
+            String size = active.mode() == com.rzx.jrec.core.RecordingMode.REGION && active.region() != null
+                    ? active.region().width() + " × " + active.region().height()
+                    : "全屏";
+            recordingCaption.setText(size + " · " + active.fps() + " fps · " + active.videoCodec());
+            recordingFileLabel.setText(active.outputPath().getFileName().toString());
         }
 
         recBlink = new FadeTransition(Duration.seconds(0.9), recDot);
         recBlink.setFromValue(1.0);
-        recBlink.setToValue(0.18);
+        recBlink.setToValue(0.45);
         recBlink.setCycleCount(Animation.INDEFINITE);
         recBlink.setAutoReverse(true);
         recBlink.play();

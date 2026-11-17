@@ -69,7 +69,6 @@ public class UiFlowProbe extends Application {
                     log("停止失败：" + e);
                 }
                 after(Duration.seconds(6), () -> {
-                    snapshot(stage, "docs/screenshot-history.png");
                     reportFiles();
                     Platform.exit();
                 });
