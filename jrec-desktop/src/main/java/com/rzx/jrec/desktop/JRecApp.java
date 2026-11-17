@@ -12,6 +12,7 @@ import com.rzx.jrec.core.RecordingConfig;
 import com.rzx.jrec.core.RecordingResult;
 import com.rzx.jrec.core.Rect;
 import com.rzx.jrec.desktop.ui.RegionSelector;
+import javafx.css.PseudoClass;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
 import javafx.animation.KeyFrame;
@@ -34,6 +35,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
 
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -106,6 +108,10 @@ public class JRecApp extends Application {
     private Circle recDot;
     private Timeline wallClock;
     private FadeTransition recBlink;
+    private final List<Region> ticks = new ArrayList<>();
+    private int litTicks = -1;
+
+    private static final PseudoClass LIT = PseudoClass.getPseudoClass("lit");
     private long recordingStartedAt;
 
     private Rect region;
@@ -129,6 +135,13 @@ public class JRecApp extends Application {
                 toast("正在录制，请先停止录制", true);
             }
         });
+        try (java.io.InputStream icon = getClass().getResourceAsStream("/com/rzx/jrec/desktop/app-icon.png")) {
+            if (icon != null) {
+                stage.getIcons().add(new Image(icon));
+            }
+        } catch (java.io.IOException ignored) {
+            // The icon is cosmetic; never block startup for it.
+        }
         stage.show();
     }
 
@@ -175,7 +188,7 @@ public class JRecApp extends Application {
         root.getChildren().addAll(configView, recordingView, toast);
     }
 
-    private HBox header() {
+    private VBox header() {
         // The mark echoes the product page: a signal dot, then the wordmark set in mono.
         Circle mark = new Circle(3.5, Color.web("#E2400F"));
         Label brand = new Label("JREC");
@@ -194,8 +207,17 @@ public class JRecApp extends Application {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox box = new HBox(12, left, spacer, ffmpegChip);
-        box.setAlignment(Pos.CENTER_LEFT);
+        HBox topRow = new HBox(12, left, spacer, ffmpegChip);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+
+        // A short signal bar under the wordmark: the one loud gesture in the header.
+        Region rule = new Region();
+        rule.getStyleClass().add("mark-rule");
+        rule.setMinSize(30, 2);
+        rule.setPrefSize(30, 2);
+        rule.setMaxSize(30, 2);
+
+        VBox box = new VBox(9, topRow, rule);
         box.getStyleClass().add("app-header");
         return box;
     }
@@ -228,7 +250,7 @@ public class JRecApp extends Application {
             updateRegionUi();
         });
 
-        HBox modes = new HBox(0, fullScreenToggle, regionToggle);
+        HBox modes = new HBox(26, fullScreenToggle, regionToggle);
 
         regionValue = new Label("整个桌面（含全部显示器）");
         regionValue.getStyleClass().add("readout");
@@ -247,7 +269,7 @@ public class JRecApp extends Application {
 
         HBox body = new HBox(12, modes, spacer, regionValue, pickRegionButton);
         body.setAlignment(Pos.CENTER_LEFT);
-        return section("01", "录制范围", body, false);
+        return section("01", "录制范围", "CAPTURE", body, false);
     }
 
     private HBox soundSection() {
@@ -266,7 +288,7 @@ public class JRecApp extends Application {
 
         VBox body = new VBox(9, grid, systemAudioHintLabel);
         body.setMinWidth(0);
-        return section("02", "声音", body, false);
+        return section("02", "声音", "AUDIO", body, false);
     }
 
     private HBox qualitySection() {
@@ -307,7 +329,7 @@ public class JRecApp extends Application {
                 field("画质", qualityCombo),
                 field("编码器", encoderCombo));
         grid.setMinWidth(0);
-        return section("03", "画质", grid, false);
+        return section("03", "画质", "ENCODE", grid, false);
     }
 
     private void showSystemAudioHint() {
@@ -353,7 +375,7 @@ public class JRecApp extends Application {
 
         HBox body = new HBox(9, dirField, browse, openDir);
         body.setAlignment(Pos.CENTER_LEFT);
-        return section("04", "保存位置", body, false);
+        return section("04", "保存位置", "OUTPUT", body, false);
     }
 
     private VBox recordArea() {
@@ -391,7 +413,7 @@ public class JRecApp extends Application {
         scroll.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        HBox sec = section("05", "最近录制", scroll, true);
+        HBox sec = section("05", "最近录制", "HISTORY", scroll, true);
         sec.getStyleClass().add("sec-end");
         sec.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(sec, Priority.ALWAYS);
@@ -414,12 +436,24 @@ public class JRecApp extends Application {
         recordingFileLabel = new Label();
         recordingFileLabel.getStyleClass().add("rec-file");
 
+        // A tape counter: one bar per second of the current half minute. It carries no
+        // information the timer lacks, but it makes the panel feel like it is running.
+        ticks.clear();
+        HBox meter = new HBox(3);
+        meter.setAlignment(Pos.CENTER);
+        for (int i = 0; i < 30; i++) {
+            Region tick = new Region();
+            tick.getStyleClass().add("tick");
+            ticks.add(tick);
+            meter.getChildren().add(tick);
+        }
+
         Button stop = new Button("停止录制");
         stop.getStyleClass().add("btn-stop");
         stop.setMaxWidth(Double.MAX_VALUE);
         stop.setOnAction(e -> stopRecording());
 
-        VBox card = new VBox(15, pillRow, timerLabel, recordingCaption, recordingFileLabel, stop);
+        VBox card = new VBox(15, pillRow, timerLabel, meter, recordingCaption, recordingFileLabel, stop);
         card.getStyleClass().add("rec-card");
         card.setAlignment(Pos.CENTER);
         // A recorder's stop panel should not stretch across the whole window.
@@ -449,14 +483,22 @@ public class JRecApp extends Application {
      * product page borrows from, and gives the one action that matters — record —
      * the only solid block of colour on the screen.
      */
-    private HBox section(String number, String title, javafx.scene.Node body, boolean grow) {
+    private HBox section(String number, String title, String english,
+                         javafx.scene.Node body, boolean grow) {
         Label num = new Label(number);
         num.getStyleClass().add("sec-num");
 
         Label cap = new Label(title);
         cap.getStyleClass().add("sec-cap");
 
-        VBox col = new VBox(10, cap, body);
+        Label en = new Label(tracked(english));
+        en.getStyleClass().add("sec-en");
+
+        HBox head = new HBox(9, cap, en);
+        head.setAlignment(Pos.BASELINE_LEFT);
+
+        VBox col = new VBox(10, head, body);
+        col.getStyleClass().add("sec-body");
         col.setMinWidth(0);
         HBox.setHgrow(col, Priority.ALWAYS);
         if (grow) {
@@ -464,13 +506,33 @@ public class JRecApp extends Application {
             VBox.setVgrow(body, Priority.ALWAYS);
         }
 
-        HBox row = new HBox(15, num, col);
+        Region rail = new Region();
+        rail.getStyleClass().add("rail");
+        rail.setMaxHeight(Double.MAX_VALUE);
+
+        HBox row = new HBox(0, num, rail, col);
         row.getStyleClass().add("sec");
         row.setAlignment(Pos.TOP_LEFT);
         if (grow) {
             row.setMaxHeight(Double.MAX_VALUE);
         }
         return row;
+    }
+
+    /**
+     * JavaFX CSS has no {@code letter-spacing}. Thin spaces between latin glyphs give
+     * short labels the tracked-out look of an instrument legend. Only for latin text —
+     * CJK with thin spaces reads as broken.
+     */
+    private static String tracked(String text) {
+        StringBuilder sb = new StringBuilder(text.length() * 2);
+        for (int i = 0; i < text.length(); i++) {
+            if (i > 0) {
+                sb.append('\u2009');
+            }
+            sb.append(text.charAt(i));
+        }
+        return sb.toString();
     }
 
     /** Equal-width columns; percentages avoid the manual pixel maths of an HBox. */
@@ -713,8 +775,14 @@ public class JRecApp extends Application {
         List<AudioChoice> items = new ArrayList<>();
         items.add(new AudioChoice("不录制", null));
         for (AudioDevice device : devices) {
+            String label = device.label();
+            String lower = label.toLowerCase();
+            // Many Windows devices are already called "麦克风 (...)", so only add a
+            // qualifier when the name does not say what kind of device it is.
+            boolean selfDescribing = lower.contains("麦克风") || lower.contains("microphone")
+                    || lower.contains("立体声") || lower.contains("stereo");
             String prefix = device.isLoopback() ? "系统声音 · " : "麦克风 · ";
-            items.add(new AudioChoice(prefix + device.label(), device));
+            items.add(new AudioChoice(selfDescribing ? label : prefix + label, device));
         }
         combo.setItems(FXCollections.observableArrayList(items));
 
@@ -779,6 +847,7 @@ public class JRecApp extends Application {
 
     private void enterRecordingState() {
         recordingStartedAt = System.nanoTime();
+        litTicks = -1;
         configView.setVisible(false);
         configView.setManaged(false);
         recordingView.setVisible(true);
@@ -796,7 +865,7 @@ public class JRecApp extends Application {
 
         recBlink = new FadeTransition(Duration.seconds(0.9), recDot);
         recBlink.setFromValue(1.0);
-        recBlink.setToValue(0.45);
+        recBlink.setToValue(0.55);
         recBlink.setCycleCount(Animation.INDEFINITE);
         recBlink.setAutoReverse(true);
         recBlink.play();
@@ -804,6 +873,14 @@ public class JRecApp extends Application {
         wallClock = new Timeline(new KeyFrame(Duration.millis(200), e -> {
             long seconds = (System.nanoTime() - recordingStartedAt) / 1_000_000_000L;
             timerLabel.setText(String.format("%02d:%02d", seconds / 60, seconds % 60));
+
+            int lit = (int) (seconds % 30);
+            if (lit != litTicks) {
+                for (int i = 0; i < ticks.size(); i++) {
+                    ticks.get(i).pseudoClassStateChanged(LIT, i < lit);
+                }
+                litTicks = lit;
+            }
         }));
         wallClock.setCycleCount(Timeline.INDEFINITE);
         wallClock.play();
@@ -819,6 +896,10 @@ public class JRecApp extends Application {
             recBlink = null;
             recDot.setOpacity(1);
         }
+        for (Region tick : ticks) {
+            tick.pseudoClassStateChanged(LIT, false);
+        }
+        litTicks = -1;
         recordingView.setVisible(false);
         recordingView.setManaged(false);
         configView.setVisible(true);

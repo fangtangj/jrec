@@ -1,46 +1,55 @@
 /* ══════════════════════════════════════════════════════════
-   JRec desktop — same visual language as the product page.
-   Warm ink ground, one signal colour, hairline rules,
-   numbered sections instead of stacked cards.
-   JavaFX CSS only: no letter-spacing, no box-shadow,
-   no flexbox — spacing and weight carry the hierarchy.
+   JRec desktop — precision instrument.
+
+   Same language as the product page: warm ink ground, one signal
+   colour, hairline rules, a margin rail, dot-field texture.
+   JavaFX CSS has no letter-spacing, no box-shadow and no flexbox,
+   so tracking is faked with thin spaces and depth comes from
+   -fx-effect instead of shadows.
    ══════════════════════════════════════════════════════════ */
 
 .root {
     -fx-font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-    -fx-background-color: linear-gradient(to bottom, #131109 0%, #0D0C09 100%);
+    -fx-background-color: linear-gradient(to bottom, #14120C 0%, #0C0B08 100%);
+    -fx-background-image: url("grid.png");
+    -fx-background-repeat: repeat;
+    -fx-background-size: 24 24;
+    -fx-background-position: 0 0;
     -fx-text-fill: #EFEBE3;
 }
 
 /* ══════════════ header ══════════════ */
 
 .app-header {
-    -fx-padding: 0 0 15 0;
+    -fx-padding: 0 0 13 0;
     -fx-border-color: transparent transparent #2A2620 transparent;
     -fx-border-width: 0 0 1 0;
 }
 
+.mark-rule {
+    -fx-background-color: #E2400F;
+}
+
 .brand {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 14px;
+    -fx-font-family: "Bahnschrift";
+    -fx-font-size: 15px;
     -fx-font-weight: bold;
-    -fx-text-fill: #F4F1E9;
+    -fx-text-fill: #F7F4EC;
 }
 
 .brand-sep {
     -fx-font-family: "Consolas";
-    -fx-font-size: 11px;
-    -fx-text-fill: #4A463C;
+    -fx-font-size: 10px;
+    -fx-text-fill: #443F35;
 }
 
 .tagline {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
+    -fx-font-size: 10px;
     -fx-text-fill: #6E6A5D;
 }
 
 .chip {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(20, 18, 12, 0.7);
     -fx-background-radius: 999;
     -fx-border-radius: 999;
     -fx-border-color: #2A2620;
@@ -65,7 +74,7 @@
 
 .sec {
     -fx-padding: 15 0 16 0;
-    -fx-border-color: transparent transparent #201D17 transparent;
+    -fx-border-color: transparent transparent #1E1B15 transparent;
     -fx-border-width: 0 0 1 0;
 }
 
@@ -74,16 +83,34 @@
     -fx-padding: 15 0 0 0;
 }
 
+/* the margin rail: one continuous hairline running the height of every section */
+.rail {
+    -fx-background-color: #221F19;
+    -fx-min-width: 1;
+    -fx-pref-width: 1;
+    -fx-max-width: 1;
+}
+
 .sec-num {
     -fx-font-family: "Consolas";
     -fx-font-size: 9.5px;
     -fx-text-fill: #4E4A3F;
-    -fx-min-width: 18px;
+    -fx-padding: 0 14 0 0;
+}
+
+.sec-body {
+    -fx-padding: 0 0 0 14;
 }
 
 .sec-cap {
     -fx-font-size: 10.5px;
-    -fx-text-fill: #7E7969;
+    -fx-text-fill: #8B8779;
+}
+
+.sec-en {
+    -fx-font-family: "Bahnschrift";
+    -fx-font-size: 9px;
+    -fx-text-fill: #6A6355;
 }
 
 .field-label {
@@ -98,6 +125,12 @@
     -fx-text-fill: #9A9484;
 }
 
+.hint {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9px;
+    -fx-text-fill: #554F43;
+}
+
 .warn-link {
     -fx-font-size: 10.5px;
     -fx-text-fill: #D29A55;
@@ -109,12 +142,6 @@
     -fx-underline: true;
 }
 
-.hint {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9px;
-    -fx-text-fill: #554F43;
-}
-
 /* ══════════════ segmented tabs ══════════════ */
 
 .seg {
@@ -124,8 +151,7 @@
     -fx-border-width: 0 0 2 0;
     -fx-text-fill: #7E7969;
     -fx-font-size: 12px;
-    -fx-padding: 6 20 8 20;
-    -fx-min-width: 76px;
+    -fx-padding: 6 0 8 0;
     -fx-cursor: hand;
 }
 
@@ -134,14 +160,14 @@
 }
 
 .seg:selected {
-    -fx-text-fill: #F4F1E9;
+    -fx-text-fill: #F7F4EC;
     -fx-border-color: transparent transparent #E2400F transparent;
 }
 
 /* ══════════════ buttons ══════════════ */
 
 .btn-ghost {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(27, 24, 18, 0.6);
     -fx-background-radius: 3;
     -fx-border-color: #2E2A22;
     -fx-border-width: 1;
@@ -154,49 +180,61 @@
 
 .btn-ghost:hover {
     -fx-border-color: #E2400F;
-    -fx-text-fill: #F4F1E9;
+    -fx-text-fill: #F7F4EC;
 }
 
+/* A key, not a banner: lit from above, sitting on its own glow. */
 .btn-record {
-    -fx-background-color: #E2400F;
+    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
     -fx-background-radius: 4;
-    -fx-text-fill: #FFF3EE;
+    -fx-text-fill: #FFF6F0;
     -fx-font-size: 13.5px;
     -fx-font-weight: bold;
     -fx-padding: 15 0 15 0;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.30), 20, 0.15, 0, 7);
 }
 
 .btn-record:hover {
-    -fx-background-color: #FF5A22;
+    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
+    -fx-effect: dropshadow(gaussian, rgba(255, 90, 34, 0.44), 26, 0.2, 0, 8);
 }
 
 .btn-record:pressed {
-    -fx-background-color: #BF350C;
+    -fx-background-color: linear-gradient(to bottom, #BC3108 0%, #9E2906 100%);
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.14), 8, 0, 0, 2);
+    -fx-translate-y: 1;
 }
 
 .btn-record:disabled {
-    -fx-opacity: 0.5;
+    -fx-opacity: 0.45;
+    -fx-effect: none;
 }
 
 .btn-stop {
-    -fx-background-color: #E2400F;
+    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
     -fx-background-radius: 4;
-    -fx-text-fill: #FFF3EE;
+    -fx-text-fill: #FFF6F0;
     -fx-font-size: 13.5px;
     -fx-font-weight: bold;
     -fx-padding: 14 0 14 0;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.30), 18, 0.15, 0, 6);
 }
 
 .btn-stop:hover {
-    -fx-background-color: #FF5A22;
+    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
+}
+
+.btn-stop:pressed {
+    -fx-translate-y: 1;
+    -fx-effect: none;
 }
 
 /* ══════════════ inputs ══════════════ */
 
 .combo {
-    -fx-background-color: #1B1812;
+    -fx-background-color: rgba(27, 24, 18, 0.72);
     -fx-background-radius: 3;
     -fx-border-color: #2A2620;
     -fx-border-width: 1;
@@ -245,11 +283,11 @@
 
 .combo-box-popup .list-view .list-cell:filled:selected {
     -fx-background-color: #2E2A22;
-    -fx-text-fill: #F4F1E9;
+    -fx-text-fill: #F7F4EC;
 }
 
 .text-field {
-    -fx-background-color: #1B1812;
+    -fx-background-color: rgba(27, 24, 18, 0.72);
     -fx-background-radius: 3;
     -fx-border-color: #2A2620;
     -fx-border-width: 1;
@@ -268,12 +306,13 @@
 /* ══════════════ recording state ══════════════ */
 
 .rec-card {
-    -fx-background-color: #17140E;
+    -fx-background-color: linear-gradient(to bottom, #1A1710 0%, #141209 100%);
     -fx-background-radius: 4;
-    -fx-border-color: #2A2620;
+    -fx-border-color: #2E2A22;
     -fx-border-width: 1;
     -fx-border-radius: 4;
-    -fx-padding: 30 28 26 28;
+    -fx-padding: 26 30 24 30;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 34, 0.1, 0, 12);
 }
 
 .rec-pill {
@@ -290,8 +329,8 @@
 
 .timer {
     -fx-font-family: "Consolas";
-    -fx-font-size: 56px;
-    -fx-text-fill: #F4F1E9;
+    -fx-font-size: 58px;
+    -fx-text-fill: #F7F4EC;
 }
 
 .rec-spec {
@@ -302,8 +341,22 @@
 
 .rec-file {
     -fx-font-family: "Consolas";
-    -fx-font-size: 10px;
+    -fx-font-size: 9.5px;
     -fx-text-fill: #554F43;
+}
+
+/* the tally strip: one bar per second of the current half-minute */
+.tick {
+    -fx-background-color: #363026;
+    -fx-background-radius: 1;
+    -fx-min-width: 4;
+    -fx-pref-width: 4;
+    -fx-min-height: 14;
+    -fx-pref-height: 14;
+}
+
+.tick:lit {
+    -fx-background-color: #E2400F;
 }
 
 /* ══════════════ history ══════════════ */
@@ -326,7 +379,7 @@
 }
 
 .history-row:hover {
-    -fx-background-color: rgba(226, 64, 15, 0.05);
+    -fx-background-color: rgba(226, 64, 15, 0.055);
 }
 
 .file-name {
@@ -389,6 +442,7 @@
     -fx-padding: 9 14 9 14;
     -fx-font-size: 11.5px;
     -fx-text-fill: #D6D0C2;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 20, 0.1, 0, 6);
 }
 
 .toast-error {
