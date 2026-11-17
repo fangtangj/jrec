@@ -14,7 +14,7 @@ import com.rzx.jrec.core.Rect;
 import com.rzx.jrec.core.RecorderState;
 import com.rzx.jrec.desktop.ui.RegionSelector;
 import com.rzx.jrec.desktop.ui.ControlBar;
-import com.rzx.jrec.desktop.ui.ScreenPreview;
+import com.rzx.jrec.desktop.ui.PetWindow;
 import com.rzx.jrec.desktop.hotkey.GlobalHotkey;
 import com.rzx.jrec.desktop.hotkey.HotkeySpec;
 import com.rzx.jrec.desktop.hotkey.Hotkeys;
@@ -89,6 +89,9 @@ public class JRecApp extends Application {
     private static final String PREFS_DIR = "outputDir";
     private static final String PREFS_QUALITY = "quality";
     private static final String PREFS_HOTKEY = "hotkey";
+    private static final String PREFS_PET = "petVisible";
+    private static final String PREFS_PET_X = "petX";
+    private static final String PREFS_PET_Y = "petY";
 
     private final Recorder recorder = new Recorder();
     private final Preferences prefs = Preferences.userNodeForPackage(JRecApp.class);
@@ -113,7 +116,13 @@ public class JRecApp extends Application {
     private Label systemAudioHintLabel;
     private Label deckSpec;
     private Label deckLabel;
-    private ScreenPreview preview;
+    private PetWindow pet;
+    private ToggleButton petToggle;
+    private Label latestName;
+    private Label latestMeta;
+    private Button latestPlay;
+    private Button latestReveal;
+    private Path latestFile;
     private Dialog<Void> settingsDialog;
     private ToggleButton regionToggle;
     private Label historyWhere;
@@ -147,7 +156,7 @@ public class JRecApp extends Application {
         this.stage = primaryStage;
         buildUi();
 
-        Scene scene = new Scene(root, 940, 720);
+        Scene scene = new Scene(root, 660, 430);
         scene.getStylesheets().add(getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
         stage.setScene(scene);
 
@@ -158,8 +167,8 @@ public class JRecApp extends Application {
         refreshHistory();
         probeFfmpegAsync();
         stage.setTitle("JRec — 屏幕录制");
-        stage.setMinWidth(900);
-        stage.setMinHeight(640);
+        stage.setMinWidth(620);
+        stage.setMinHeight(400);
         stage.setOnCloseRequest(e -> {
             if (recorder.isRecording()) {
                 e.consume();
@@ -174,11 +183,11 @@ public class JRecApp extends Application {
             // The icon is cosmetic; never block startup for it.
         }
         stage.show();
-        preview.start();
+        startPet();
 
         // The first call loads and unpacks JNA's native library, which can take a few
-        // hundred milliseconds. Doing that on the FX thread would stall the first preview
-        // frame, so registration happens off-thread and only the result comes back.
+        // hundred milliseconds. Doing that on the FX thread would stall the first
+        // paint, so registration happens off-thread and only the result comes back.
         hotkeySpec = HotkeySpec.parse(prefs.get(PREFS_HOTKEY, ""));
         new Thread(() -> {
             GlobalHotkey created = Hotkeys.create();
@@ -194,8 +203,10 @@ public class JRecApp extends Application {
         if (recorder.isRecording()) {
             recorder.stop();
         }
-        if (preview != null) {
-            preview.dispose();
+        if (pet != null) {
+            prefs.putDouble(PREFS_PET_X, pet.x());
+            prefs.putDouble(PREFS_PET_Y, pet.y());
+            pet.close();
         }
         if (controlBar != null) {
             controlBar.hide();
@@ -226,7 +237,9 @@ public class JRecApp extends Application {
                 card,
                 history
         );
-        VBox.setVgrow(card, Priority.ALWAYS);
+        // Spare height goes to the list. A result plate stretched to fill is just a big
+        // empty box with a file name floating in the middle of it.
+        VBox.setVgrow(history, Priority.ALWAYS);
         updateRegionUi();
 
         recordingView = buildRecordingView();
@@ -263,11 +276,15 @@ public class JRecApp extends Application {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        petToggle = new ToggleButton("桌宠");
+        petToggle.getStyleClass().addAll("btn-ghost", "pet-toggle");
+        petToggle.setOnAction(e -> setPetVisible(petToggle.isSelected()));
+
         Button settings = new Button("设置");
         settings.getStyleClass().add("btn-ghost");
         settings.setOnAction(e -> settingsDialog.showAndWait());
 
-        HBox topRow = new HBox(10, left, spacer, ffmpegChip, settings);
+        HBox topRow = new HBox(8, left, spacer, ffmpegChip, petToggle, settings);
         topRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(topRow);
@@ -276,25 +293,59 @@ public class JRecApp extends Application {
     }
 
     /**
-     * One white sheet holding the three things a recorder actually is: what to capture,
-     * the picture of it, and the button that starts.
+     * The panel: what to capture, the newest take, and the button that starts.
      * <p>
-     * The transport used to lie on top of the preview under a gradient scrim, which left a
-     * hard seam across the picture and put the record key on top of the very thing the user
-     * wants to look at. Separating them costs nothing and fixes both.
+     * The live preview is gone on purpose. A recorder spends almost all of its life idle,
+     * and a window-sized mirror of the desktop is the least useful thing to put in that
+     * space — it showed the app's own reflection four times over, ate a frame every half
+     * second, and pushed the one thing people actually come back for (the last file) into a
+     * 10px row at the bottom.
      */
     private VBox captureCard() {
-        StackPane stagePane = previewStage();
-        VBox.setVgrow(stagePane, Priority.ALWAYS);
-        stagePane.setMinHeight(0);
-
-        HBox toolbar = toolbarRow();
-        HBox footer = deck();
-
-        VBox card = new VBox(12, toolbar, stagePane, footer);
+        VBox card = new VBox(14, toolbarRow(), latestBlock(), deck());
         card.getStyleClass().add("capture-card");
         card.setMinHeight(0);
         return card;
+    }
+
+    /**
+     * The newest recording, given the space the preview used to take.
+     * <p>
+     * Its file name is the largest text in the window because after a take the first
+     * question is "where did it go, and what is it called". The two actions beside it are
+     * the two things anyone does next: watch it, or open the folder it lives in.
+     */
+    private VBox latestBlock() {
+        Label cap = new Label("最新录制");
+        cap.getStyleClass().add("latest-cap");
+
+        latestPlay = new Button("播放");
+        latestPlay.getStyleClass().add("btn-solid");
+        latestPlay.setDisable(true);
+        latestPlay.setOnAction(e -> openLatest());
+
+        latestReveal = new Button("打开文件夹");
+        latestReveal.getStyleClass().add("btn-ghost");
+        latestReveal.setDisable(true);
+        latestReveal.setOnAction(e -> reveal(latestFile));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox head = new HBox(8, cap, spacer, latestPlay, latestReveal);
+        head.setAlignment(Pos.CENTER_LEFT);
+
+        latestName = new Label("还没有录制");
+        latestName.getStyleClass().add("latest-name");
+
+        latestMeta = new Label("按下面的按钮开始，或单击桌宠");
+        latestMeta.getStyleClass().add("latest-meta");
+
+        VBox box = new VBox(6, head, latestName, latestMeta);
+        box.getStyleClass().add("latest");
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setMaxHeight(Double.MAX_VALUE);
+        return box;
     }
 
     /** What kind of capture, and what the next take will contain. */
@@ -361,15 +412,6 @@ public class JRecApp extends Application {
      * is both the thing a recorder should be and the thing the product page promised
      * when it said "nothing else".
      */
-    private StackPane previewStage() {
-        preview = new ScreenPreview();
-
-        StackPane stagePane = new StackPane(preview);
-        stagePane.getStyleClass().add("stage");
-        stagePane.setMinHeight(0);
-        return stagePane;
-    }
-
     private HBox modeSwitch() {
         modeGroup = new ToggleGroup();
         fullScreenToggle = new ToggleButton("全屏");
@@ -713,7 +755,7 @@ public class JRecApp extends Application {
     }
 
     private VBox historySection() {
-        Label cap = new Label("最近录制");
+        Label cap = new Label("更早的记录");
         cap.getStyleClass().add("sec-cap");
 
         historyWhere = new Label();
@@ -736,7 +778,6 @@ public class JRecApp extends Application {
 
         VBox box = new VBox(4, head, scroll);
         box.setMinHeight(72);
-        box.setMaxHeight(240);
         box.setPadding(new Insets(18, 2, 0, 2));
         return box;
     }
@@ -890,9 +931,6 @@ public class JRecApp extends Application {
 
     private void updateRegionUi() {
         boolean useRegion = modeGroup.getSelectedToggle() != fullScreenToggle && region != null;
-        if (preview != null) {
-            preview.setArea(useRegion ? region : null);
-        }
         if (pickRegionButton != null) {
             pickRegionButton.setVisible(useRegion);
             pickRegionButton.setManaged(useRegion);
@@ -1205,8 +1243,10 @@ public class JRecApp extends Application {
     private void enterRecordingState() {
         recordingStartedAt = System.nanoTime();
         litTicks = -1;
-        if (preview != null) {
-            preview.pause();
+        // The pet would otherwise sit in the corner of every full-screen take: gdigrab has
+        // no window exclusion. The floating bar carries the stop control while it is gone.
+        if (pet != null) {
+            pet.hide();
         }
         if (controlBar != null) {
             controlBar.setTime(0);
@@ -1272,8 +1312,9 @@ public class JRecApp extends Application {
             tick.pseudoClassStateChanged(LIT, false);
         }
         litTicks = -1;
-        if (preview != null) {
-            preview.start();
+        if (pet != null && prefs.getBoolean(PREFS_PET, true)) {
+            pet.show(prefs.getDouble(PREFS_PET_X, Double.NaN),
+                    prefs.getDouble(PREFS_PET_Y, Double.NaN));
         }
         if (controlBar != null) {
             controlBar.hide();
@@ -1293,24 +1334,53 @@ public class JRecApp extends Application {
     // ------------------------------------------------------------------ history
 
     private void refreshHistory() {
-        historyBox.getChildren().clear();
         Path dir = Path.of(dirField.getText());
         if (historyWhere != null) {
             historyWhere.setText(shortPath(dir));
         }
         List<Path> files = listRecordings(dir);
-        if (files.isEmpty()) {
-            // An empty list is the first thing a new user sees, so it teaches the two ways
-            // to start instead of stating the obvious.
-            String key = hotkeySpec != null && hotkeyBound ? "按 " + hotkeySpec.label() + "，" : "";
-            Label empty = new Label(key + "或点「开始录制」，录完的文件会出现在这里");
+
+        latestFile = files.isEmpty() ? null : files.get(0);
+        if (latestFile == null) {
+            latestName.setText("还没有录制");
+            latestMeta.setText("按「开始录制」，或单击桌宠");
+            latestPlay.setDisable(true);
+            latestReveal.setDisable(true);
+        } else {
+            Path file = latestFile;
+            latestName.setText(file.getFileName().toString());
+            latestMeta.setText("读取中…");
+            latestPlay.setDisable(false);
+            latestReveal.setDisable(false);
+            // Probing spawns FFmpeg, so keep it off the UI thread and fill the label later.
+            CompletableFuture.supplyAsync(() -> MediaProbe.probe(file))
+                    .thenAccept(info -> Platform.runLater(() -> {
+                        // A newer take may have replaced it while this probe was running.
+                        if (file.equals(latestFile)) {
+                            latestMeta.setText(describe(info));
+                        }
+                    }))
+                    .exceptionally(t -> null);
+        }
+
+        historyBox.getChildren().clear();
+        if (files.size() <= 1) {
+            Label empty = new Label(files.isEmpty()
+                    ? "录完的文件会出现在这里"
+                    : "更早的录制会列在这里");
             empty.getStyleClass().add("history-empty");
             historyBox.getChildren().add(empty);
             return;
         }
-        for (Path file : files) {
+        for (Path file : files.subList(1, files.size())) {
             historyBox.getChildren().add(historyRow(file));
         }
+    }
+
+    private static String describe(MediaProbe.MediaInfo info) {
+        return info.durationText() + " · " + info.resolution()
+                + (info.hasAudio() ? " · 含音轨" : " · 无音轨")
+                + " · " + humanSize(info.sizeBytes());
     }
 
     private static List<Path> listRecordings(Path dir) {
@@ -1354,10 +1424,7 @@ public class JRecApp extends Application {
 
         // Probing spawns FFmpeg, so keep it off the UI thread and fill the label later.
         CompletableFuture.supplyAsync(() -> MediaProbe.probe(file))
-                .thenAccept(info -> Platform.runLater(() -> meta.setText(
-                        info.durationText() + " · " + info.resolution()
-                                + (info.hasAudio() ? " · 含音轨" : " · 无音轨")
-                                + " · " + humanSize(info.sizeBytes()))))
+                .thenAccept(info -> Platform.runLater(() -> meta.setText(describe(info))))
                 .exceptionally(t -> null);
         return row;
     }
@@ -1377,6 +1444,83 @@ public class JRecApp extends Application {
         }
         double mb = bytes / 1024.0 / 1024.0;
         return mb >= 1024 ? String.format("%.2f GB", mb / 1024) : String.format("%.1f MB", mb);
+    }
+
+    /**
+     * Brings up the mascot and points its actions back at this window.
+     * <p>
+     * Everything the pet can do is routed through the same methods the window uses, so
+     * there is no second implementation to keep in sync — and a click on the pet cannot
+     * end up in a state the window does not know about.
+     */
+    private void startPet() {
+        pet = new PetWindow();
+        pet.setRecordingCheck(recorder::isRecording);
+        pet.setOnToggle(this::toggleRecording);
+        pet.setOnOpenMain(this::showMainWindow);
+        pet.setOnOpenLatest(this::openLatest);
+        pet.setOnOpenFolder(() -> openPath(Path.of(dirField.getText())));
+        pet.setOnHide(() -> setPetVisible(false));
+        pet.setOnQuit(Platform::exit);
+        pet.setHint(hotkeySpec != null ? "点我：开始录制 · 右键更多" : "点我：开始录制");
+
+        boolean visible = prefs.getBoolean(PREFS_PET, true);
+        if (petToggle != null) {
+            petToggle.setSelected(visible);
+        }
+        if (visible) {
+            pet.show(prefs.getDouble(PREFS_PET_X, Double.NaN),
+                    prefs.getDouble(PREFS_PET_Y, Double.NaN));
+        }
+    }
+
+    private void setPetVisible(boolean visible) {
+        prefs.putBoolean(PREFS_PET, visible);
+        if (petToggle != null && petToggle.isSelected() != visible) {
+            petToggle.setSelected(visible);
+        }
+        if (pet == null) {
+            return;
+        }
+        if (visible) {
+            pet.show(prefs.getDouble(PREFS_PET_X, Double.NaN),
+                    prefs.getDouble(PREFS_PET_Y, Double.NaN));
+        } else {
+            prefs.putDouble(PREFS_PET_X, pet.x());
+            prefs.putDouble(PREFS_PET_Y, pet.y());
+            pet.hide();
+        }
+    }
+
+    private void showMainWindow() {
+        if (stage.isIconified()) {
+            stage.setIconified(false);
+        }
+        stage.show();
+        stage.toFront();
+    }
+
+    private void openLatest() {
+        if (latestFile == null) {
+            toast("还没有录制文件", false);
+            return;
+        }
+        openPath(latestFile);
+    }
+
+    /**
+     * Opens the containing folder with the file already selected. "Show me where this went"
+     * is the actual request; dropping the user into a folder to hunt for the file is not.
+     */
+    private void reveal(Path file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            new ProcessBuilder("explorer.exe", "/select," + file.toAbsolutePath()).start();
+        } catch (java.io.IOException e) {
+            openPath(file.getParent());
+        }
     }
 
     private void openPath(Path path) {

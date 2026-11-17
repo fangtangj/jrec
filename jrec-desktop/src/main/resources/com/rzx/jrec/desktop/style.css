@@ -107,45 +107,53 @@
     -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.14), 5, 0.05, 0, 1);
 }
 
-/* ══════════════ the viewport ══════════════ */
+/* ══════════════ newest recording ══════════════
+   Takes the space the live preview used to occupy. A tinted plate rather than white so
+   it reads as a result panel inside the sheet, not as another section of the form. */
 
-.stage {
-    -fx-background-color: #100E0B;
-    -fx-background-radius: 10;
+.latest {
+    -fx-background-color: #FBF6EA;
+    -fx-background-radius: 12;
+    -fx-border-color: #EFE6D4;
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+    -fx-padding: 15 18 17 18;
 }
 
-.viewfinder {
-    -fx-background-color: #0B0A08;
-}
-
-.vf-chip {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
-    -fx-text-fill: #D8D2C4;
-    -fx-background-color: rgba(11, 10, 8, 0.66);
-    -fx-background-radius: 4;
-    -fx-padding: 3 8 3 8;
-}
-
-.vf-live {
+.latest-cap {
     -fx-font-family: "Bahnschrift";
-    -fx-font-size: 9px;
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #A79E8B;
+}
+
+.latest-name {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 20px;
+    -fx-text-fill: #17150F;
+}
+
+.latest-meta {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #8A8375;
+}
+
+.btn-solid {
+    -fx-background-color: #17150F;
+    -fx-background-radius: 8;
     -fx-text-fill: #FFFFFF;
-    -fx-background-color: rgba(11, 10, 8, 0.60);
-    -fx-background-radius: 4;
-    -fx-padding: 3 8 3 8;
+    -fx-font-size: 11.5px;
+    -fx-padding: 6 16 6 16;
+    -fx-cursor: hand;
 }
 
-/* Corner ticks are white, not orange: the key owns the accent. */
-.vf-corner {
-    -fx-border-color: rgba(255, 255, 255, 0.34);
-    -fx-border-width: 0;
+.btn-solid:hover {
+    -fx-background-color: #322D22;
 }
 
-.vf-corner.tl { -fx-border-width: 1 0 0 1; }
-.vf-corner.tr { -fx-border-width: 1 1 0 0; }
-.vf-corner.bl { -fx-border-width: 0 0 1 1; }
-.vf-corner.br { -fx-border-width: 0 1 1 0; }
+.btn-solid:disabled {
+    -fx-opacity: 0.35;
+}
 
 /* ══════════════ transport ══════════════ */
 
@@ -588,4 +596,29 @@
 
 .bar-close:hover {
     -fx-text-fill: #F7F4EC;
+}
+
+/* ══════════════ desktop pet ══════════════ */
+
+.pet-root {
+    -fx-background-color: transparent;
+}
+
+.pet-bubble {
+    -fx-background-color: rgba(23, 21, 15, 0.92);
+    -fx-text-fill: #F7F1E4;
+    -fx-font-size: 10.5px;
+    -fx-background-radius: 999;
+    -fx-padding: 5 11 5 11;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 10, 0.1, 0, 2);
+}
+
+.pet-toggle:selected {
+    -fx-background-color: #17150F;
+    -fx-border-color: #17150F;
+    -fx-text-fill: #FFFFFF;
+}
+
+.pet-toggle:selected:hover {
+    -fx-background-color: #322D22;
 }
