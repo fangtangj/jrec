@@ -1,0 +1,7 @@
+# Normalise line endings so a clone on Linux/macOS matches the committed bytes.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jar binary
+*.exe binary
