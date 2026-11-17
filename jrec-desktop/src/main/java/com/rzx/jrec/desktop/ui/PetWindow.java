@@ -5,13 +5,18 @@ import javafx.animation.Interpolator;
 import javafx.animation.PauseTransition;
 import javafx.animation.RotateTransition;
 import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
+import javafx.animation.KeyFrame;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -25,7 +30,10 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
 
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BooleanSupplier;
+import java.util.function.DoubleConsumer;
 
 /**
  * The mascot: a transparent, always-on-top window holding the character, which can start
@@ -54,6 +62,7 @@ public final class PetWindow {
     private final Label bubble = new Label();
     private final Label badge = new Label("REC");
     private final StackPane art = new StackPane(body, badge);
+    private final StackPane lift = new StackPane(art);
     private final ContextMenu menu = new ContextMenu();
     private final MenuItem toggleItem = new MenuItem("开始录制");
     private final PauseTransition pendingClick = new PauseTransition(DOUBLE_CLICK_WINDOW);
@@ -69,6 +78,11 @@ public final class PetWindow {
     private TranslateTransition floatMotion;
     private RotateTransition swayMotion;
     private ScaleTransition hoverMotion;
+    private PauseTransition blinkTimer;
+    private PauseTransition hopTimer;
+    private Image openEyes;
+    private Image closedEyes;
+    private DoubleConsumer sizeChosen = px -> { };
 
     private double pressScreenX;
     private double pressScreenY;
@@ -77,8 +91,15 @@ public final class PetWindow {
     private boolean dragging;
 
     public PetWindow() {
-        Image artImage = new Image(getClass().getResourceAsStream("/com/rzx/jrec/desktop/pet.png"));
-        body.setImage(artImage);
+        openEyes = new Image(getClass().getResourceAsStream("/com/rzx/jrec/desktop/pet.png"));
+        // A second frame with the eyes shut, drawn from the same art so the blink does not
+        // need a second expression. Missing file simply means no blinking.
+        try (java.io.InputStream blink = getClass().getResourceAsStream("/com/rzx/jrec/desktop/pet-blink.png")) {
+            closedEyes = blink == null ? null : new Image(blink);
+        } catch (java.io.IOException ignored) {
+            closedEyes = null;
+        }
+        body.setImage(openEyes);
         body.setFitHeight(DEFAULT_HEIGHT);
         body.setPreserveRatio(true);
         body.setSmooth(true);
@@ -108,25 +129,30 @@ public final class PetWindow {
         // transparent pixels and makes the reveal a pure visibility flip.
         bubble.setMouseTransparent(true);
 
-        VBox root = new VBox(4, bubble, art);
+        lift.setPickOnBounds(false);
+        lift.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+
+        VBox root = new VBox(4, bubble, lift);
         root.setAlignment(Pos.BOTTOM_CENTER);
         root.setPadding(new Insets(8, 10, 12, 10));
         root.setPickOnBounds(false);
         root.getStyleClass().add("pet-root");
 
-        menu.getItems().addAll(
-                toggleItem,
-                new MenuItem("显示主窗口"),
-                new MenuItem("打开最近录制"),
-                new MenuItem("打开录制文件夹"),
-                new SeparatorMenuItem(),
-                new MenuItem("隐藏桌宠"),
-                new MenuItem("退出 JRec"));
-        menu.getItems().get(1).setOnAction(e -> onOpenMain.run());
-        menu.getItems().get(2).setOnAction(e -> onOpenLatest.run());
-        menu.getItems().get(3).setOnAction(e -> onOpenFolder.run());
-        menu.getItems().get(5).setOnAction(e -> onHide.run());
-        menu.getItems().get(6).setOnAction(e -> onQuit.run());
+        MenuItem mainItem = new MenuItem("显示主窗口");
+        mainItem.setOnAction(e -> onOpenMain.run());
+        MenuItem latestItem = new MenuItem("打开最近录制");
+        latestItem.setOnAction(e -> onOpenLatest.run());
+        MenuItem folderItem = new MenuItem("打开录制文件夹");
+        folderItem.setOnAction(e -> onOpenFolder.run());
+        MenuItem hideItem = new MenuItem("隐藏桌宠");
+        hideItem.setOnAction(e -> onHide.run());
+        MenuItem quitItem = new MenuItem("退出 JRec");
+        quitItem.setOnAction(e -> onQuit.run());
+
+        // Named items, not indices: adding the size submenu silently moved every handler
+        // below it one slot, which is exactly the kind of bug a list index invites.
+        menu.getItems().addAll(toggleItem, mainItem, latestItem, folderItem,
+                sizeMenu(), new SeparatorMenuItem(), hideItem, quitItem);
         // The first entry flips between the two actions every time it is opened.
         menu.setOnShowing(e -> toggleItem.setText(recording.getAsBoolean() ? "停止录制" : "开始录制"));
         toggleItem.setOnAction(e -> onToggle.run());
@@ -162,7 +188,14 @@ public final class PetWindow {
                 return;
             }
             // A drag that happens to end over the pet must not also fire the action.
-            if (e.getButton() != MouseButton.PRIMARY || dragging) {
+            if (e.getButton() != MouseButton.PRIMARY) {
+                return;
+            }
+            if (dragging) {
+                // Dropping the pet against an edge should leave it flush, not three pixels
+                // off. Snapping after the drag (not during) keeps the pointer authoritative
+                // while it moves.
+                snapToEdges();
                 return;
             }
             // A single click must not fire straight away, or every double click would also
@@ -195,6 +228,7 @@ public final class PetWindow {
                 getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
 
         startIdleMotion(false);
+        startLifeLoop();
     }
 
     // ------------------------------------------------------------------ wiring
@@ -269,6 +303,158 @@ public final class PetWindow {
         return stage.getY();
     }
 
+    // ------------------------------------------------------------------ interaction
+
+    private record SizeOption(String label, double pixels) {
+    }
+
+    private static final List<SizeOption> SIZES = List.of(
+            new SizeOption("小", 160), new SizeOption("中", DEFAULT_HEIGHT), new SizeOption("大", 272));
+
+    /** Size presets, right where the user already is instead of three clicks into settings. */
+    private Menu sizeMenu() {
+        Menu size = new Menu("大小");
+        ToggleGroup group = new ToggleGroup();
+        for (SizeOption option : SIZES) {
+            RadioMenuItem item = new RadioMenuItem(option.label());
+            item.setToggleGroup(group);
+            item.setUserData(option.pixels());
+            item.setOnAction(e -> {
+                setArtHeight(option.pixels());
+                sizeChosen.accept(option.pixels());
+            });
+            size.getItems().add(item);
+        }
+        size.setOnShowing(e -> group.getToggles().forEach(t -> {
+            double pixels = (double) ((RadioMenuItem) t).getUserData();
+            t.setSelected(Math.abs(pixels - currentHeight()) < 1);
+        }));
+        return size;
+    }
+
+    public void setSizeHandler(DoubleConsumer handler) {
+        this.sizeChosen = handler;
+    }
+
+    public double currentHeight() {
+        return body.getFitHeight();
+    }
+
+    /**
+     * Pulls the pet flush against whichever screen edge it was dropped near. A mascot left
+     * three pixels off the edge looks like a mistake rather than a position.
+     */
+    private void snapToEdges() {
+        Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+        double x = stage.getX();
+        double y = stage.getY();
+        double w = stage.getWidth();
+        double h = stage.getHeight();
+        double tolerance = 28;
+
+        if (Math.abs(x - bounds.getMinX()) < tolerance) {
+            x = bounds.getMinX();
+        } else if (Math.abs(x + w - bounds.getMaxX()) < tolerance) {
+            x = bounds.getMaxX() - w;
+        }
+        if (Math.abs(y - bounds.getMinY()) < tolerance) {
+            y = bounds.getMinY();
+        } else if (Math.abs(y + h - bounds.getMaxY()) < tolerance) {
+            y = bounds.getMaxY() - h;
+        }
+        if (x != stage.getX() || y != stage.getY()) {
+            slideTo(x, y);
+        }
+    }
+
+    private void slideTo(double targetX, double targetY) {
+        double fromX = stage.getX();
+        double fromY = stage.getY();
+        Timeline slide = new Timeline();
+        int frames = 8;
+        for (int i = 1; i <= frames; i++) {
+            double t = i / (double) frames;
+            double e = 1 - Math.pow(1 - t, 3);
+            slide.getKeyFrames().add(new KeyFrame(Duration.millis(130 * t), ev -> {
+                stage.setX(fromX + (targetX - fromX) * e);
+                stage.setY(fromY + (targetY - fromY) * e);
+            }));
+        }
+        slide.play();
+    }
+
+    // ------------------------------------------------------------------ idle life
+
+    /**
+     * Blinks and occasional hops, on independent timers with random gaps. The point is that
+     * the pet never falls into a visible rhythm: anything exactly periodic stops reading as
+     * alive within about a minute.
+     */
+    private void startLifeLoop() {
+        scheduleBlink();
+        scheduleHop();
+    }
+
+    private void stopLifeLoop() {
+        if (blinkTimer != null) {
+            blinkTimer.stop();
+            blinkTimer = null;
+        }
+        if (hopTimer != null) {
+            hopTimer.stop();
+            hopTimer = null;
+        }
+        if (closedEyes != null) {
+            body.setImage(openEyes);
+        }
+    }
+
+    private void scheduleBlink() {
+        blinkTimer = new PauseTransition(
+                Duration.millis(ThreadLocalRandom.current().nextInt(2800, 7200)));
+        blinkTimer.setOnFinished(e -> {
+            blink();
+            scheduleBlink();
+        });
+        blinkTimer.play();
+    }
+
+    private void blink() {
+        if (closedEyes == null || !stage.isShowing()) {
+            return;
+        }
+        body.setImage(closedEyes);
+        PauseTransition shut = new PauseTransition(Duration.millis(115));
+        shut.setOnFinished(e -> body.setImage(openEyes));
+        shut.play();
+    }
+
+    private void scheduleHop() {
+        hopTimer = new PauseTransition(
+                Duration.millis(ThreadLocalRandom.current().nextInt(9000, 17000)));
+        hopTimer.setOnFinished(e -> {
+            hop();
+            scheduleHop();
+        });
+        hopTimer.play();
+    }
+
+    /**
+     * A small hop, played on a separate node from the float. Two animations writing
+     * translateY on the same node fight each other and produce a stutter.
+     */
+    private void hop() {
+        if (!stage.isShowing()) {
+            return;
+        }
+        TranslateTransition jump = new TranslateTransition(Duration.millis(150), lift);
+        jump.setByY(-16);
+        jump.setInterpolator(Interpolator.EASE_OUT);
+        jump.setAutoReverse(true);
+        jump.setCycleCount(2);
+        jump.play();
+    }
+
     // ------------------------------------------------------------------ stage
 
     /**
@@ -298,6 +484,8 @@ public final class PetWindow {
         // a moment. Asking for a fresh layout on the next pulse clears it.
         javafx.application.Platform.runLater(stage::sizeToScene);
 
+        startLifeLoop();
+
         FadeTransition fade = new FadeTransition(Duration.millis(180), stage.getScene().getRoot());
         fade.setFromValue(0.2);
         fade.setToValue(1);
@@ -313,6 +501,7 @@ public final class PetWindow {
     public void hide() {
         hideBubble();
         stopMotion();
+        stopLifeLoop();
         stage.hide();
     }
 

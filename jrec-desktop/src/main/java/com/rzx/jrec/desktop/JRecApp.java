@@ -1565,6 +1565,14 @@ public class JRecApp extends Application {
         pet.setOnHide(() -> setPetVisible(false));
         pet.setOnQuit(Platform::exit);
         pet.setHint(hotkeySpec != null ? "点我：开始录制 · 右键更多" : "点我：开始录制");
+        // A size picked from the right-click menu has to reach the settings sheet too, or
+        // the two places start disagreeing about how big the pet is.
+        pet.setSizeHandler(pixels -> {
+            prefs.putDouble(PREFS_PET_SIZE, pixels);
+            if (petSizeCombo != null) {
+                petSizeCombo.setValue(sizeLabel(pixels));
+            }
+        });
 
         pet.setArtHeight(prefs.getDouble(PREFS_PET_SIZE, PetWindow.DEFAULT_HEIGHT));
         pet.setArtOpacity(prefs.getDouble(PREFS_PET_OPACITY, 1.0));
