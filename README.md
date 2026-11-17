@@ -115,6 +115,10 @@ mvn javafx:run -Djrec.ffmpeg=/path/to/ffmpeg
 
 桌宠要覆盖在别人正在做的事情上面，所以幅度刻意做得都很小。
 
+左：平时；右：眨眼的一瞬。
+
+![睁眼与眨眼](docs/screenshot-pet-blink.png)
+
 ![设置面板](docs/screenshot-settings.png)
 
 ## 为什么这样设计
