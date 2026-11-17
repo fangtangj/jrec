@@ -4,6 +4,8 @@
 
 桌面端已实现并实测通过；Android 端在路线图里（见[已知限制](#已知限制)）。
 
+**产品页：https://fangtangj.github.io/jrec/**
+
 ![主界面](docs/screenshot-main.png)
 
 ## 特性
