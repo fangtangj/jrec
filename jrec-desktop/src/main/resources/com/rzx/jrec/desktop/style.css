@@ -1,292 +1,366 @@
-/* JRec desktop theme — plain JavaFX CSS, no external dependencies. */
+/* ══════════════════════════════════════════════════════════
+   JRec desktop — same visual language as the product page.
+   Warm ink ground, one signal colour, hairline rules,
+   numbered sections instead of stacked cards.
+   JavaFX CSS only: no letter-spacing, no box-shadow,
+   no flexbox — spacing and weight carry the hierarchy.
+   ══════════════════════════════════════════════════════════ */
 
 .root {
     -fx-font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-    -fx-background-color: #12141a;
-    -fx-text-fill: #e8ebf2;
+    -fx-background-color: linear-gradient(to bottom, #131109 0%, #0D0C09 100%);
+    -fx-text-fill: #EFEBE3;
 }
 
-/* ---------- header ---------- */
+/* ══════════════ header ══════════════ */
+
+.app-header {
+    -fx-padding: 0 0 15 0;
+    -fx-border-color: transparent transparent #2A2620 transparent;
+    -fx-border-width: 0 0 1 0;
+}
 
 .brand {
-    -fx-font-size: 20px;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
-    -fx-text-fill: #f2f4f9;
+    -fx-text-fill: #F4F1E9;
 }
 
-.brand-accent {
-    -fx-text-fill: #6c7cff;
+.brand-sep {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 11px;
+    -fx-text-fill: #4A463C;
 }
 
 .tagline {
-    -fx-font-size: 11.5px;
-    -fx-text-fill: #7f8899;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #6E6A5D;
 }
 
 .chip {
-    -fx-background-color: #1e222c;
+    -fx-background-color: transparent;
     -fx-background-radius: 999;
     -fx-border-radius: 999;
-    -fx-border-color: #2b3140;
+    -fx-border-color: #2A2620;
     -fx-border-width: 1;
-    -fx-padding: 4 11 4 11;
-    -fx-font-size: 11px;
-    -fx-text-fill: #93a0bb;
+    -fx-padding: 3 10 3 10;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #8B8779;
 }
 
 .chip-ok {
-    -fx-text-fill: #63d5a0;
-    -fx-border-color: #27513f;
-    -fx-background-color: #16241f;
+    -fx-text-fill: #86A98C;
+    -fx-border-color: #2C3B2E;
 }
 
 .chip-warn {
-    -fx-text-fill: #e6b566;
-    -fx-border-color: #4a3a20;
-    -fx-background-color: #241d12;
+    -fx-text-fill: #D29A55;
+    -fx-border-color: #41331F;
 }
 
-/* ---------- cards ---------- */
+/* ══════════════ numbered sections ══════════════ */
 
-.card {
-    -fx-background-color: #171a22;
-    -fx-background-radius: 12;
-    -fx-border-radius: 12;
-    -fx-border-color: #232833;
-    -fx-border-width: 1;
-    -fx-padding: 16;
+.sec {
+    -fx-padding: 15 0 16 0;
+    -fx-border-color: transparent transparent #201D17 transparent;
+    -fx-border-width: 0 0 1 0;
 }
 
-.card-title {
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #78829a;
+.sec-end {
+    -fx-border-color: transparent;
+    -fx-padding: 15 0 0 0;
+}
+
+.sec-num {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #4E4A3F;
+    -fx-min-width: 18px;
+}
+
+.sec-cap {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #7E7969;
 }
 
 .field-label {
-    -fx-font-size: 11.5px;
-    -fx-text-fill: #8b93a7;
+    -fx-font-size: 10px;
+    -fx-text-fill: #6E6A5D;
+    -fx-padding: 0 0 0 1;
 }
 
-.value-text {
-    -fx-font-size: 12.5px;
-    -fx-text-fill: #d6dbe8;
+.readout {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 11px;
+    -fx-text-fill: #9A9484;
 }
 
 .warn-link {
-    -fx-font-size: 11.5px;
-    -fx-text-fill: #e0a95c;
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #D29A55;
     -fx-cursor: hand;
 }
 
 .warn-link:hover {
-    -fx-text-fill: #f0c179;
+    -fx-text-fill: #F0BC79;
     -fx-underline: true;
 }
 
-/* ---------- segmented control ---------- */
+.hint {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9px;
+    -fx-text-fill: #554F43;
+}
+
+/* ══════════════ segmented tabs ══════════════ */
 
 .seg {
-    -fx-background-color: #1d212b;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: #2a3040;
-    -fx-border-width: 1;
-    -fx-text-fill: #9aa3b8;
-    -fx-font-size: 12.5px;
-    -fx-padding: 7 18 7 18;
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent transparent #241F19 transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-text-fill: #7E7969;
+    -fx-font-size: 12px;
+    -fx-padding: 6 20 8 20;
+    -fx-min-width: 76px;
     -fx-cursor: hand;
 }
 
 .seg:hover {
-    -fx-text-fill: #cdd4e4;
+    -fx-text-fill: #C9C3B4;
 }
 
 .seg:selected {
-    -fx-background-color: #2a3152;
-    -fx-border-color: #4b57a8;
-    -fx-text-fill: #dfe4ff;
+    -fx-text-fill: #F4F1E9;
+    -fx-border-color: transparent transparent #E2400F transparent;
 }
 
-/* ---------- buttons ---------- */
+/* ══════════════ buttons ══════════════ */
 
 .btn-ghost {
     -fx-background-color: transparent;
-    -fx-border-color: #2d3444;
+    -fx-background-radius: 3;
+    -fx-border-color: #2E2A22;
     -fx-border-width: 1;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
-    -fx-text-fill: #9aa3b8;
-    -fx-font-size: 12px;
-    -fx-padding: 7 14 7 14;
+    -fx-border-radius: 3;
+    -fx-text-fill: #B6B0A1;
+    -fx-font-size: 11px;
+    -fx-padding: 6 12 6 12;
     -fx-cursor: hand;
 }
 
 .btn-ghost:hover {
-    -fx-border-color: #434c63;
-    -fx-text-fill: #d6dbe8;
+    -fx-border-color: #E2400F;
+    -fx-text-fill: #F4F1E9;
 }
 
 .btn-record {
-    -fx-background-color: #6c7cff;
-    -fx-background-radius: 10;
-    -fx-text-fill: white;
-    -fx-font-size: 14.5px;
+    -fx-background-color: #E2400F;
+    -fx-background-radius: 4;
+    -fx-text-fill: #FFF3EE;
+    -fx-font-size: 13.5px;
     -fx-font-weight: bold;
-    -fx-padding: 13 0 13 0;
+    -fx-padding: 15 0 15 0;
     -fx-cursor: hand;
 }
 
 .btn-record:hover {
-    -fx-background-color: #7d8bff;
+    -fx-background-color: #FF5A22;
+}
+
+.btn-record:pressed {
+    -fx-background-color: #BF350C;
 }
 
 .btn-record:disabled {
-    -fx-opacity: 0.45;
+    -fx-opacity: 0.5;
 }
 
 .btn-stop {
-    -fx-background-color: #ff4d5e;
-    -fx-background-radius: 10;
-    -fx-text-fill: white;
-    -fx-font-size: 14.5px;
+    -fx-background-color: #E2400F;
+    -fx-background-radius: 4;
+    -fx-text-fill: #FFF3EE;
+    -fx-font-size: 13.5px;
     -fx-font-weight: bold;
-    -fx-padding: 13 0 13 0;
+    -fx-padding: 14 0 14 0;
     -fx-cursor: hand;
 }
 
 .btn-stop:hover {
-    -fx-background-color: #ff6070;
+    -fx-background-color: #FF5A22;
 }
 
-/* ---------- inputs ---------- */
+/* ══════════════ inputs ══════════════ */
 
 .combo {
-    -fx-background-color: #1d212b;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: #2a3040;
+    -fx-background-color: #1B1812;
+    -fx-background-radius: 3;
+    -fx-border-color: #2A2620;
     -fx-border-width: 1;
-    -fx-font-size: 12.5px;
+    -fx-border-radius: 3;
+    -fx-font-size: 11.5px;
     -fx-cursor: hand;
 }
 
+.combo:hover {
+    -fx-border-color: #3C362B;
+}
+
+.combo:focused {
+    -fx-border-color: #E2400F;
+}
+
 .combo .list-cell {
-    -fx-text-fill: #d6dbe8;
     -fx-background-color: transparent;
-    -fx-padding: 3 6 3 6;
+    -fx-text-fill: #C9C3B4;
+    -fx-padding: 2 4 2 8;
 }
 
 .combo .arrow {
-    -fx-background-color: #78829a;
+    -fx-background-color: #6E6A5D;
 }
 
-.combo-popup .list-view {
-    -fx-background-color: #1b1f28;
-    -fx-border-color: #2a3040;
+.combo-box-popup .list-view {
+    -fx-background-color: #1B1812;
+    -fx-background-radius: 3;
+    -fx-border-color: #2A2620;
     -fx-border-width: 1;
+    -fx-border-radius: 3;
+    -fx-padding: 3;
 }
 
-.combo-popup .list-view .list-cell {
-    -fx-text-fill: #d6dbe8;
-    -fx-background-color: #1b1f28;
-    -fx-padding: 7 12 7 12;
+.combo-box-popup .list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #C9C3B4;
+    -fx-font-size: 11.5px;
+    -fx-padding: 7 10 7 10;
 }
 
-.combo-popup .list-view .list-cell:hover {
-    -fx-background-color: #262c3a;
+.combo-box-popup .list-view .list-cell:hover {
+    -fx-background-color: #26221A;
 }
 
-.combo-popup .list-view .list-cell:selected {
-    -fx-background-color: #2a3152;
-    -fx-text-fill: #dfe4ff;
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #2E2A22;
+    -fx-text-fill: #F4F1E9;
 }
 
 .text-field {
-    -fx-background-color: #1d212b;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: #2a3040;
+    -fx-background-color: #1B1812;
+    -fx-background-radius: 3;
+    -fx-border-color: #2A2620;
     -fx-border-width: 1;
-    -fx-text-fill: #d6dbe8;
-    -fx-font-size: 12px;
+    -fx-border-radius: 3;
+    -fx-text-fill: #B6B0A1;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 11px;
     -fx-padding: 8 10 8 10;
-    -fx-prompt-text-fill: #616a7e;
+    -fx-prompt-text-fill: #554F43;
 }
 
-/* ---------- recording state ---------- */
+.text-field:focused {
+    -fx-border-color: #E2400F;
+}
 
-.rec-dot {
-    -fx-fill: #ff4d5e;
+/* ══════════════ recording state ══════════════ */
+
+.rec-card {
+    -fx-background-color: #17140E;
+    -fx-background-radius: 4;
+    -fx-border-color: #2A2620;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-padding: 30 28 26 28;
+}
+
+.rec-pill {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9px;
+    -fx-text-fill: #FF8B6E;
+    -fx-background-color: #2A1510;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: #5C2A1C;
+    -fx-border-width: 1;
+    -fx-padding: 3 10 3 10;
 }
 
 .timer {
-    -fx-font-family: "Consolas", "Menlo", monospace;
-    -fx-font-size: 46px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #f2f4f9;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 56px;
+    -fx-text-fill: #F4F1E9;
 }
 
 .rec-caption {
-    -fx-font-size: 12px;
-    -fx-text-fill: #8b93a7;
+    -fx-font-size: 11px;
+    -fx-text-fill: #7E7969;
 }
 
-/* ---------- history ---------- */
+.rec-file {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10px;
+    -fx-text-fill: #554F43;
+}
+
+/* ══════════════ history ══════════════ */
+
+.history-scroll {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.history-scroll > .viewport {
+    -fx-background-color: transparent;
+}
 
 .history-row {
-    -fx-background-color: #171a22;
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-    -fx-border-color: #232833;
-    -fx-border-width: 1;
-    -fx-padding: 10 14 10 14;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #1C1913 transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 9 2 9 2;
 }
 
 .history-row:hover {
-    -fx-border-color: #333c50;
+    -fx-background-color: rgba(226, 64, 15, 0.05);
 }
 
 .file-name {
-    -fx-font-size: 12.5px;
-    -fx-text-fill: #dfe4f0;
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #C9C3B4;
 }
 
 .file-meta {
-    -fx-font-size: 11px;
-    -fx-text-fill: #78829a;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #6E6A5D;
 }
 
 .link-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #6c7cff;
-    -fx-font-size: 11.5px;
+    -fx-text-fill: #8B8779;
+    -fx-font-size: 10.5px;
     -fx-padding: 2 6 2 6;
     -fx-cursor: hand;
 }
 
 .link-btn:hover {
-    -fx-text-fill: #9aa5ff;
-    -fx-underline: true;
+    -fx-text-fill: #E2400F;
 }
 
-.scroll-pane {
-    -fx-background-color: transparent;
-    -fx-background: transparent;
-}
-
-.scroll-pane > .viewport {
-    -fx-background-color: transparent;
-}
+/* ══════════════ misc ══════════════ */
 
 .scroll-bar:vertical {
     -fx-background-color: transparent;
-    -fx-pref-width: 9;
+    -fx-pref-width: 8;
 }
 
 .scroll-bar:vertical .thumb {
-    -fx-background-color: #2f3547;
-    -fx-background-radius: 6;
+    -fx-background-color: #2E2A22;
+    -fx-background-radius: 4;
 }
 
 .scroll-bar:vertical .track {
@@ -299,40 +373,60 @@
     -fx-pref-height: 0;
 }
 
-.toast {
-    -fx-background-color: #1f2430;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: #313a4d;
-    -fx-border-width: 1;
-    -fx-padding: 9 14 9 14;
-    -fx-font-size: 12px;
-    -fx-text-fill: #dfe4f0;
-}
-
-.toast-error {
-    -fx-border-color: #6a2b34;
-    -fx-background-color: #271820;
-    -fx-text-fill: #ffb3ba;
-}
-
-.history-scroll {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-shape: " ";
     -fx-padding: 0;
 }
 
-.history-scroll > .viewport {
-    -fx-background-color: transparent;
+.toast {
+    -fx-background-color: #1B1812;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+    -fx-border-color: #3C362B;
+    -fx-border-width: 1;
+    -fx-padding: 9 14 9 14;
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #D6D0C2;
 }
 
-.rec-pill {
+.toast-error {
+    -fx-background-color: #241310;
+    -fx-border-color: #6B2A1C;
+    -fx-text-fill: #FFB3A0;
+}
+
+/* ══════════════ dialogs ══════════════ */
+
+.dialog-pane {
+    -fx-background-color: #17140E;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #1B1812;
+}
+
+.dialog-pane .label,
+.dialog-pane .header-panel .label {
+    -fx-text-fill: #D6D0C2;
+}
+
+.dialog-pane > .content.label {
+    -fx-text-fill: #B6B0A1;
+}
+
+.dialog-pane .text-area {
+    -fx-font-family: "Consolas";
     -fx-font-size: 11px;
-    -fx-text-fill: #ff8b96;
-    -fx-background-color: #2a171d;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: #5c2730;
-    -fx-border-width: 1;
-    -fx-padding: 3 10 3 10;
+    -fx-text-fill: #B6B0A1;
+}
+
+.dialog-pane .text-area .content {
+    -fx-background-color: #1B1812;
+}
+
+.dialog-pane .button {
+    -fx-background-color: #2A2620;
+    -fx-text-fill: #D6D0C2;
+    -fx-background-radius: 3;
 }

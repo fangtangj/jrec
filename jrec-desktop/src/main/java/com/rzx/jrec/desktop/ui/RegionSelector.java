@@ -31,8 +31,8 @@ import java.util.Optional;
 public final class RegionSelector {
 
     private static final double MIN_SIZE = 16;
-    private static final Color DIM = Color.rgb(10, 12, 16, 0.58);
-    private static final Color ACCENT = Color.web("#6c7cff");
+    private static final Color DIM = Color.rgb(13, 12, 9, 0.62);
+    private static final Color ACCENT = Color.web("#E2400F");
 
     private double startX;
     private double startY;

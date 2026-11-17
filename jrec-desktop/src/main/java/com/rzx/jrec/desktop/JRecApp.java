@@ -12,6 +12,8 @@ import com.rzx.jrec.core.RecordingConfig;
 import com.rzx.jrec.core.RecordingResult;
 import com.rzx.jrec.core.Rect;
 import com.rzx.jrec.desktop.ui.RegionSelector;
+import javafx.animation.Animation;
+import javafx.animation.FadeTransition;
 import javafx.animation.KeyFrame;
 import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
@@ -103,6 +105,7 @@ public class JRecApp extends Application {
     private VBox historyBox;
     private Circle recDot;
     private Timeline wallClock;
+    private FadeTransition recBlink;
     private long recordingStartedAt;
 
     private Rect region;
@@ -142,18 +145,20 @@ public class JRecApp extends Application {
     private void buildUi() {
         root = new StackPane();
         root.getStyleClass().add("root");
-        root.setPadding(new Insets(22, 24, 22, 24));
+        root.setPadding(new Insets(18, 26, 14, 26));
 
-        configView = new VBox(14);
+        HBox history = historySection();
+        configView = new VBox(0);
         configView.getChildren().addAll(
                 header(),
-                regionCard(),
-                optionsCard(),
-                outputCard(),
-                recordButton(),
-                historySection()
+                regionSection(),
+                soundSection(),
+                qualitySection(),
+                outputSection(),
+                recordArea(),
+                history
         );
-        VBox.setVgrow(configView.getChildren().get(5), Priority.ALWAYS);
+        VBox.setVgrow(history, Priority.ALWAYS);
 
         recordingView = buildRecordingView();
         recordingView.setVisible(false);
@@ -171,30 +176,31 @@ public class JRecApp extends Application {
     }
 
     private HBox header() {
-        Label brand = new Label("JRec");
+        // The mark echoes the product page: a signal dot, then the wordmark set in mono.
+        Circle mark = new Circle(3.5, Color.web("#E2400F"));
+        Label brand = new Label("JREC");
         brand.getStyleClass().add("brand");
-
-        Label tagline = new Label("Java 跨平台屏幕录制 · 全屏 / 自选区域");
+        Label sep = new Label("/");
+        sep.getStyleClass().add("brand-sep");
+        Label tagline = new Label("屏幕录制");
         tagline.getStyleClass().add("tagline");
 
-        VBox titles = new VBox(2, brand, tagline);
-        titles.setAlignment(Pos.CENTER_LEFT);
+        HBox left = new HBox(9, mark, brand, sep, tagline);
+        left.setAlignment(Pos.CENTER_LEFT);
 
         ffmpegChip = new Label("检测 FFmpeg…");
         ffmpegChip.getStyleClass().addAll("chip", "chip-warn");
 
-        HBox spacer = new HBox();
+        Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox box = new HBox(12, titles, spacer, ffmpegChip);
+        HBox box = new HBox(12, left, spacer, ffmpegChip);
         box.setAlignment(Pos.CENTER_LEFT);
+        box.getStyleClass().add("app-header");
         return box;
     }
 
-    private VBox regionCard() {
-        Label title = new Label("录制范围");
-        title.getStyleClass().add("card-title");
-
+    private HBox regionSection() {
         modeGroup = new ToggleGroup();
         fullScreenToggle = new ToggleButton("全屏");
         fullScreenToggle.getStyleClass().add("seg");
@@ -222,10 +228,10 @@ public class JRecApp extends Application {
             updateRegionUi();
         });
 
-        HBox modes = new HBox(8, fullScreenToggle, regionToggle);
+        HBox modes = new HBox(0, fullScreenToggle, regionToggle);
 
         regionValue = new Label("整个桌面（含全部显示器）");
-        regionValue.getStyleClass().add("value-text");
+        regionValue.getStyleClass().add("readout");
 
         pickRegionButton = new Button("重新框选");
         pickRegionButton.getStyleClass().add("btn-ghost");
@@ -236,23 +242,34 @@ public class JRecApp extends Application {
             }
         });
 
-        Region grow = new Region();
-        HBox.setHgrow(grow, Priority.ALWAYS);
-        HBox row = new HBox(10, regionValue, grow, pickRegionButton);
-        row.setAlignment(Pos.CENTER_LEFT);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        VBox card = new VBox(10, title, modes, row);
-        card.getStyleClass().add("card");
-        return card;
+        HBox body = new HBox(12, modes, spacer, regionValue, pickRegionButton);
+        body.setAlignment(Pos.CENTER_LEFT);
+        return section("01", "录制范围", body, false);
     }
 
-    private VBox optionsCard() {
-        Label title = new Label("声音与画质");
-        title.getStyleClass().add("card-title");
-
+    private HBox soundSection() {
         micCombo = audioCombo();
         systemCombo = audioCombo();
 
+        GridPane grid = grid(2,
+                field("麦克风", micCombo),
+                field("系统声音", systemCombo));
+
+        systemAudioHintLabel = new Label();
+        systemAudioHintLabel.getStyleClass().add("warn-link");
+        systemAudioHintLabel.setVisible(false);
+        systemAudioHintLabel.setManaged(false);
+        systemAudioHintLabel.setOnMouseClicked(e -> showSystemAudioHint());
+
+        VBox body = new VBox(9, grid, systemAudioHintLabel);
+        body.setMinWidth(0);
+        return section("02", "声音", body, false);
+    }
+
+    private HBox qualitySection() {
         fpsCombo = new ComboBox<>(FXCollections.observableArrayList(15, 24, 30, 60));
         fpsCombo.setValue(30);
         fpsCombo.getStyleClass().add("combo");
@@ -280,40 +297,17 @@ public class JRecApp extends Application {
         });
 
         for (ComboBox<?> combo : List.of(micCombo, systemCombo, fpsCombo, qualityCombo, encoderCombo)) {
-            // Without this a combo refuses to shrink and the row overflows the card.
+            // Without this a combo refuses to shrink and the row overflows its column.
             combo.setMinWidth(0);
             combo.setMaxWidth(Double.MAX_VALUE);
         }
 
-        // Six equal columns: row one uses 3+3, row two uses 2+2+2, so the two rows
-        // line up without any manual pixel maths.
-        GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(12);
-        for (int i = 0; i < 6; i++) {
-            ColumnConstraints constraints = new ColumnConstraints();
-            constraints.setPercentWidth(100.0 / 6);
-            constraints.setFillWidth(true);
-            grid.getColumnConstraints().add(constraints);
-        }
-
-        grid.add(field("麦克风", micCombo), 0, 0, 3, 1);
-        grid.add(field("系统声音", systemCombo), 3, 0, 3, 1);
-        grid.add(field("帧率", fpsCombo), 0, 1, 2, 1);
-        grid.add(field("画质", qualityCombo), 2, 1, 2, 1);
-        grid.add(field("编码器", encoderCombo), 4, 1, 2, 1);
-
-        systemAudioHintLabel = new Label();
-        systemAudioHintLabel.getStyleClass().add("warn-link");
-        systemAudioHintLabel.setVisible(false);
-        systemAudioHintLabel.setManaged(false);
-        systemAudioHintLabel.setOnMouseClicked(e -> showSystemAudioHint());
-
-        VBox card = new VBox(12, title, grid, systemAudioHintLabel);
-        card.getStyleClass().add("card");
-        // The card must not be stretched by an over-wide child.
-        card.setMinWidth(0);
-        return card;
+        GridPane grid = grid(3,
+                field("帧率", fpsCombo),
+                field("画质", qualityCombo),
+                field("编码器", encoderCombo));
+        grid.setMinWidth(0);
+        return section("03", "画质", grid, false);
     }
 
     private void showSystemAudioHint() {
@@ -330,12 +324,10 @@ public class JRecApp extends Application {
         alert.showAndWait();
     }
 
-    private VBox outputCard() {
-        Label title = new Label("保存位置");
-        title.getStyleClass().add("card-title");
-
+    private HBox outputSection() {
         dirField = new TextField(defaultOutputDir().toString());
         dirField.getStyleClass().add("text-field");
+        dirField.setMinWidth(0);
         HBox.setHgrow(dirField, Priority.ALWAYS);
 
         Button browse = new Button("浏览…");
@@ -359,27 +351,36 @@ public class JRecApp extends Application {
         openDir.getStyleClass().add("btn-ghost");
         openDir.setOnAction(e -> openPath(Path.of(dirField.getText())));
 
-        HBox row = new HBox(10, dirField, browse, openDir);
-        row.setAlignment(Pos.CENTER_LEFT);
-
-        VBox card = new VBox(10, title, row);
-        card.getStyleClass().add("card");
-        return card;
+        HBox body = new HBox(9, dirField, browse, openDir);
+        body.setAlignment(Pos.CENTER_LEFT);
+        return section("04", "保存位置", body, false);
     }
 
-    private Button recordButton() {
+    private VBox recordArea() {
         recordButton = new Button("开始录制");
         recordButton.getStyleClass().add("btn-record");
-        recordButton.setMaxWidth(Double.MAX_VALUE);
+        // Fixed width on purpose: a full-bleed bar turned the one accent colour into a
+        // background wash. Sized like a physical key, it stays the thing the eye lands on.
+        recordButton.setPrefWidth(300);
+        recordButton.setMinWidth(240);
         recordButton.setOnAction(e -> startRecording());
-        return recordButton;
+
+        Label spec = new Label("MP4 · H.264 · AAC · 可直接播放");
+        spec.getStyleClass().add("hint");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox row = new HBox(16, recordButton, spacer, spec);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        VBox body = new VBox(row);
+        body.setPadding(new Insets(16, 0, 16, 0));
+        return body;
     }
 
-    private VBox historySection() {
-        Label title = new Label("最近录制");
-        title.getStyleClass().add("card-title");
-
-        historyBox = new VBox(8);
+    private HBox historySection() {
+        historyBox = new VBox(0);
 
         ScrollPane scroll = new ScrollPane(historyBox);
         scroll.getStyleClass().add("history-scroll");
@@ -390,16 +391,16 @@ public class JRecApp extends Application {
         scroll.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        VBox box = new VBox(10, title, scroll);
-        box.getStyleClass().add("card");
-        box.setMaxHeight(Double.MAX_VALUE);
-        VBox.setVgrow(box, Priority.ALWAYS);
-        return box;
+        HBox sec = section("05", "最近录制", scroll, true);
+        sec.getStyleClass().add("sec-end");
+        sec.setMaxHeight(Double.MAX_VALUE);
+        VBox.setVgrow(sec, Priority.ALWAYS);
+        return sec;
     }
 
     private VBox buildRecordingView() {
-        recDot = new Circle(5, Color.web("#ff4d5e"));
-        Label pill = new Label("录制中");
+        recDot = new Circle(4, Color.web("#FF5A22"));
+        Label pill = new Label("REC");
         pill.getStyleClass().add("rec-pill");
         HBox pillRow = new HBox(8, recDot, pill);
         pillRow.setAlignment(Pos.CENTER);
@@ -411,19 +412,18 @@ public class JRecApp extends Application {
         recordingCaption.getStyleClass().add("rec-caption");
 
         recordingFileLabel = new Label();
-        recordingFileLabel.getStyleClass().add("file-meta");
+        recordingFileLabel.getStyleClass().add("rec-file");
 
         Button stop = new Button("停止录制");
         stop.getStyleClass().add("btn-stop");
         stop.setMaxWidth(Double.MAX_VALUE);
         stop.setOnAction(e -> stopRecording());
 
-        VBox card = new VBox(14, pillRow, timerLabel, recordingCaption, recordingFileLabel, stop);
-        card.getStyleClass().add("card");
+        VBox card = new VBox(15, pillRow, timerLabel, recordingCaption, recordingFileLabel, stop);
+        card.getStyleClass().add("rec-card");
         card.setAlignment(Pos.CENTER);
-        card.setPadding(new Insets(34, 30, 30, 30));
         // A recorder's stop panel should not stretch across the whole window.
-        card.setMaxWidth(440);
+        card.setMaxWidth(400);
 
         VBox box = new VBox(card);
         box.setAlignment(Pos.CENTER);
@@ -437,6 +437,57 @@ public class JRecApp extends Application {
         box.setMinWidth(0);
         box.setMaxWidth(Double.MAX_VALUE);
         return box;
+    }
+
+    /**
+     * One numbered band of the control panel: a mono index in the left gutter, a
+     * caption, then the body.
+     * <p>
+     * This replaces a stack of identical rounded cards. Three equal cards made every
+     * setting look equally important and left the eye with no place to start; a
+     * numbered column with hairline rules reads like the instrument manual the
+     * product page borrows from, and gives the one action that matters — record —
+     * the only solid block of colour on the screen.
+     */
+    private HBox section(String number, String title, javafx.scene.Node body, boolean grow) {
+        Label num = new Label(number);
+        num.getStyleClass().add("sec-num");
+
+        Label cap = new Label(title);
+        cap.getStyleClass().add("sec-cap");
+
+        VBox col = new VBox(10, cap, body);
+        col.setMinWidth(0);
+        HBox.setHgrow(col, Priority.ALWAYS);
+        if (grow) {
+            col.setMaxHeight(Double.MAX_VALUE);
+            VBox.setVgrow(body, Priority.ALWAYS);
+        }
+
+        HBox row = new HBox(15, num, col);
+        row.getStyleClass().add("sec");
+        row.setAlignment(Pos.TOP_LEFT);
+        if (grow) {
+            row.setMaxHeight(Double.MAX_VALUE);
+        }
+        return row;
+    }
+
+    /** Equal-width columns; percentages avoid the manual pixel maths of an HBox. */
+    private GridPane grid(int columns, javafx.scene.Node... cells) {
+        GridPane g = new GridPane();
+        g.setHgap(12);
+        g.setVgap(9);
+        for (int i = 0; i < columns; i++) {
+            ColumnConstraints constraints = new ColumnConstraints();
+            constraints.setPercentWidth(100.0 / columns);
+            constraints.setFillWidth(true);
+            g.getColumnConstraints().add(constraints);
+        }
+        for (int i = 0; i < cells.length; i++) {
+            g.add(cells[i], i % columns, i / columns);
+        }
+        return g;
     }
 
     // ------------------------------------------------------------------ actions
@@ -737,6 +788,13 @@ public class JRecApp extends Application {
             recordingFileLabel.setText(recorder.config().outputPath().getFileName().toString());
         }
 
+        recBlink = new FadeTransition(Duration.seconds(0.9), recDot);
+        recBlink.setFromValue(1.0);
+        recBlink.setToValue(0.18);
+        recBlink.setCycleCount(Animation.INDEFINITE);
+        recBlink.setAutoReverse(true);
+        recBlink.play();
+
         wallClock = new Timeline(new KeyFrame(Duration.millis(200), e -> {
             long seconds = (System.nanoTime() - recordingStartedAt) / 1_000_000_000L;
             timerLabel.setText(String.format("%02d:%02d", seconds / 60, seconds % 60));
@@ -749,6 +807,11 @@ public class JRecApp extends Application {
         if (wallClock != null) {
             wallClock.stop();
             wallClock = null;
+        }
+        if (recBlink != null) {
+            recBlink.stop();
+            recBlink = null;
+            recDot.setOpacity(1);
         }
         recordingView.setVisible(false);
         recordingView.setManaged(false);
