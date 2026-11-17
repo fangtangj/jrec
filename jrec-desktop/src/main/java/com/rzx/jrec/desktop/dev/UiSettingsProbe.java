@@ -5,6 +5,7 @@ import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.control.TextField;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.stage.Stage;
@@ -27,6 +28,8 @@ import java.lang.reflect.Field;
  */
 public class UiSettingsProbe extends Application {
 
+    private static final String DOC_OUTPUT_PATH = "C:\\Users\\Public\\Videos\\JRec";
+
     @Override
     public void start(Stage stage) {
         JRecApp app = new JRecApp();
@@ -43,6 +46,12 @@ public class UiSettingsProbe extends Application {
                 field.setAccessible(true);
                 javafx.scene.control.Dialog<?> dialog = (javafx.scene.control.Dialog<?>) field.get(app);
                 dialog.show();
+
+                // This image goes into a public repository, and the real save directory
+                // carries the machine's account name. Show a neutral path instead.
+                Field dir = JRecApp.class.getDeclaredField("dirField");
+                dir.setAccessible(true);
+                ((TextField) dir.get(app)).setText(DOC_OUTPUT_PATH);
 
                 PauseTransition wait = new PauseTransition(Duration.seconds(2));
                 wait.setOnFinished(x -> {

@@ -907,7 +907,7 @@ h1 .l2 {
         <div class="spec-row">
           <span class="spec-idx">R-07b</span>
           <span class="spec-name">全局快捷键 · 悬浮条</span>
-          <span class="spec-note">Ctrl+Alt+R 起停 · 占用则自动降级</span>
+          <span class="spec-note">Ctrl+Alt+R 起停 · 设置里可改键</span>
           <span class="spec-state">已实测</span>
         </div>
         <div class="spec-row">
@@ -1023,6 +1023,7 @@ h1 .l2 {
       <h2 class="sec-title rv">跑起来<span class="en">Run</span></h2>
       <p class="sec-lede rv">
         需要 JDK 17+ 和 Maven 3.8+。不需要预装 FFmpeg —— 首次启动若找不到，界面会提示并提供一键下载。
+        也可以直接打成 exe：自带运行时，拿到别的机器上不用装 Java。
       </p>
 
       <div class="run rv">
@@ -1032,6 +1033,10 @@ h1 .l2 {
         <div><br></div>
         <div><span class="cmt"># 启动桌面端</span></div>
         <div><span class="pr">$</span> <span class="cmd">cd jrec-desktop &amp;&amp; mvn javafx:run</span></div>
+        <div><br></div>
+        <div><span class="cmt"># 或者打成双击即用的 exe（自带运行时）</span></div>
+        <div><span class="pr">&gt;</span> <span class="cmd">build-dist.bat</span></div>
+        <div><span class="cmt"># 产物：dist\JRec\JRec.exe</span></div>
       </div>
     </div>
   </section>

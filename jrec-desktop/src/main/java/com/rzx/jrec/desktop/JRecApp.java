@@ -16,6 +16,7 @@ import com.rzx.jrec.desktop.ui.RegionSelector;
 import com.rzx.jrec.desktop.ui.ControlBar;
 import com.rzx.jrec.desktop.ui.ScreenPreview;
 import com.rzx.jrec.desktop.hotkey.GlobalHotkey;
+import com.rzx.jrec.desktop.hotkey.HotkeySpec;
 import com.rzx.jrec.desktop.hotkey.Hotkeys;
 import javafx.css.PseudoClass;
 import javafx.animation.Animation;
@@ -44,6 +45,8 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -85,6 +88,7 @@ public class JRecApp extends Application {
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final String PREFS_DIR = "outputDir";
     private static final String PREFS_QUALITY = "quality";
+    private static final String PREFS_HOTKEY = "hotkey";
 
     private final Recorder recorder = new Recorder();
     private final Preferences prefs = Preferences.userNodeForPackage(JRecApp.class);
@@ -116,6 +120,10 @@ public class JRecApp extends Application {
     private Label keyHint;
     private ControlBar controlBar;
     private GlobalHotkey hotkey;
+    private TextField hotkeyField;
+    private Label hotkeyStatus;
+    private HotkeySpec hotkeySpec;
+    private boolean hotkeyBound;
 
     private Label timerLabel;
     private Label recordingFileLabel;
@@ -167,13 +175,15 @@ public class JRecApp extends Application {
         stage.show();
         preview.start();
 
-        // Registration talks to the OS and can block briefly, so it does not run on the
-        // FX thread. A taken combination must degrade to the button, not break startup.
+        // The first call loads and unpacks JNA's native library, which can take a few
+        // hundred milliseconds. Doing that on the FX thread would stall the first preview
+        // frame, so registration happens off-thread and only the result comes back.
+        hotkeySpec = HotkeySpec.parse(prefs.get(PREFS_HOTKEY, ""));
         new Thread(() -> {
             GlobalHotkey created = Hotkeys.create();
-            boolean bound = created.register(() -> Platform.runLater(this::toggleRecording));
-            this.hotkey = created;
-            Platform.runLater(() -> showHotkeyHint(bound, created));
+            boolean bound = created.register(hotkeySpec,
+                    () -> Platform.runLater(this::toggleRecording));
+            Platform.runLater(() -> adoptHotkey(created, bound));
         }, "jrec-hotkey-init").start();
     }
 
@@ -423,7 +433,7 @@ public class JRecApp extends Application {
         dialog.setTitle("录制设置");
         dialog.setResizable(true);
 
-        VBox content = new VBox(0, soundSection(), qualitySection(), outputSection());
+        VBox content = new VBox(0, soundSection(), qualitySection(), outputSection(), hotkeySection());
         content.setPrefWidth(660);
         content.setPadding(new Insets(2, 6, 4, 6));
 
@@ -434,9 +444,17 @@ public class JRecApp extends Application {
         pane.getStylesheets().add(
                 getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
 
+        // The shortcut has to be let go while the sheet is open. Otherwise pressing a
+        // combination into the capture field is intercepted by this very application, and
+        // the user cannot type the key they are trying to assign.
+        dialog.setOnShowing(e -> releaseHotkey());
+
         dialog.setOnHidden(e -> {
             prefs.put(PREFS_DIR, dirField.getText());
             prefs.put(PREFS_QUALITY, qualityCombo.getValue());
+            if (hotkey == null) {
+                bindDesired();
+            }
             refreshHistory();
             updateDeckSpec();
         });
@@ -505,6 +523,164 @@ public class JRecApp extends Application {
         HBox body = new HBox(9, dirField, browse, openDir);
         body.setAlignment(Pos.CENTER_LEFT);
         return section("03", "保存位置", "OUTPUT", body, false);
+    }
+
+    /**
+     * Assigning a shortcut by pressing it, rather than by picking from a list of keys the
+     * author happened to think of. The field is read-only on purpose: it is a recorder,
+     * not a text box, so there is nothing to type and no caret to fight.
+     */
+    private HBox hotkeySection() {
+        hotkeyField = new TextField();
+        hotkeyField.getStyleClass().add("hotkey-field");
+        hotkeyField.setEditable(false);
+        hotkeyField.setPrefWidth(214);
+        hotkeyField.setMinWidth(160);
+        hotkeyField.setPromptText("点击后按下组合键");
+        hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
+        hotkeyField.addEventFilter(KeyEvent.KEY_PRESSED, this::captureHotkeyKey);
+
+        Button reset = new Button("恢复默认");
+        reset.getStyleClass().add("btn-ghost");
+        reset.setOnAction(e -> resetHotkey());
+
+        Label tip = new Label("需搭配 Ctrl / Alt / Shift / Win，或单独用 F1–F12");
+        tip.getStyleClass().add("field-note");
+
+        HBox row = new HBox(9, hotkeyField, reset);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        hotkeyStatus = new Label();
+        hotkeyStatus.getStyleClass().add("field-note");
+
+        VBox body = new VBox(8, row, hotkeyStatus, tip);
+        body.setMinWidth(0);
+        return section("04", "快捷键", "HOTKEY", body, false);
+    }
+
+    private void captureHotkeyKey(KeyEvent event) {
+        // Tab and Enter would otherwise move focus or close the dialog mid-assignment.
+        event.consume();
+
+        if (event.getCode() == KeyCode.ESCAPE) {
+            hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
+            showHotkeyMessage(null);
+            return;
+        }
+
+        HotkeySpec candidate = Hotkeys.fromKeyEvent(event);
+        if (candidate == null) {
+            showHotkeyMessage("这个组合不能用：需要修饰键搭配，或单独用 F1–F12");
+            return;
+        }
+        // The previous registration is still live here, so an identical combination would
+        // collide with ourselves and report a bogus conflict.
+        if (candidate.equals(hotkeySpec) && hotkeyBound) {
+            hotkeyField.setText(candidate.label());
+            showHotkeyMessage(null);
+            return;
+        }
+        assignHotkey(candidate);
+    }
+
+    private void assignHotkey(HotkeySpec candidate) {
+        GlobalHotkey created = Hotkeys.create();
+        boolean bound = created.register(candidate,
+                () -> Platform.runLater(this::toggleRecording));
+        if (!bound) {
+            // Keep whatever was working before; a failed attempt must not leave the user
+            // with no shortcut at all.
+            created.close();
+            hotkeyField.setText(hotkeySpec == null ? "" : hotkeySpec.label());
+            showHotkeyMessage(created.failure());
+            return;
+        }
+        closeHotkey();
+        hotkey = created;
+        hotkeySpec = candidate;
+        hotkeyBound = true;
+        prefs.put(PREFS_HOTKEY, candidate.label());
+        hotkeyField.setText(candidate.label());
+        showHotkeyMessage(null);
+        updateDeckHint();
+    }
+
+    private void resetHotkey() {
+        closeHotkey();
+        hotkeySpec = null;
+        prefs.remove(PREFS_HOTKEY);
+        bindDesired();
+    }
+
+    /** Binds whatever {@link #hotkeySpec} says, falling back to the built-in list when null. */
+    private void bindDesired() {
+        closeHotkey();
+        GlobalHotkey created = Hotkeys.create();
+        boolean bound = created.register(hotkeySpec,
+                () -> Platform.runLater(this::toggleRecording));
+        adoptHotkey(created, bound);
+    }
+
+    private void adoptHotkey(GlobalHotkey created, boolean bound) {
+        hotkey = created;
+        hotkeyBound = bound;
+        if (bound) {
+            String actual = created.label();
+            if (hotkeySpec == null) {
+                hotkeySpec = HotkeySpec.parse(actual);
+            }
+            if (hotkeySpec != null) {
+                prefs.put(PREFS_HOTKEY, hotkeySpec.label());
+            }
+            if (hotkeyField != null) {
+                hotkeyField.setText(hotkeySpec == null ? actual : hotkeySpec.label());
+            }
+            showHotkeyMessage(null);
+        } else {
+            showHotkeyMessage(created.failure());
+        }
+        updateDeckHint();
+    }
+
+    private void closeHotkey() {
+        if (hotkey != null) {
+            hotkey.close();
+            hotkey = null;
+        }
+        hotkeyBound = false;
+    }
+
+    /** Lets go of the registration without forgetting what was chosen. */
+    private void releaseHotkey() {
+        closeHotkey();
+        if (keyHint != null) {
+            keyHint.setText("快捷键已暂停");
+        }
+    }
+
+    private void showHotkeyMessage(String error) {
+        if (hotkeyStatus == null) {
+            return;
+        }
+        boolean bad = error != null;
+        hotkeyStatus.setText(bad ? error : "当前生效：" + (hotkeySpec == null
+                ? "默认（自动挑选空闲组合）" : hotkeySpec.label()));
+        hotkeyStatus.getStyleClass().setAll(bad ? "field-error" : "field-note");
+    }
+
+    private void updateDeckHint() {
+        if (keyHint == null) {
+            return;
+        }
+        if (hotkeyBound && hotkeySpec != null) {
+            keyHint.setText(hotkeySpec.label());
+            keyHint.getStyleClass().setAll("key-hint");
+        } else {
+            keyHint.setText("快捷键不可用");
+            keyHint.getStyleClass().setAll("key-hint", "key-hint-off");
+        }
+        keyHint.setVisible(true);
+        keyHint.setManaged(true);
     }
 
     private VBox historySection() {
@@ -711,20 +887,6 @@ public class JRecApp extends Application {
             startRecording();
         }
         // STARTING / STOPPING: a transition is already in flight; ignore the press.
-    }
-
-    private void showHotkeyHint(boolean bound, GlobalHotkey impl) {
-        if (keyHint == null) {
-            return;
-        }
-        if (bound) {
-            keyHint.setText(impl.label());
-        } else {
-            keyHint.setText(impl.isSupported() ? "快捷键被占用" : "无全局快捷键");
-            keyHint.getStyleClass().add("key-hint-off");
-        }
-        keyHint.setVisible(true);
-        keyHint.setManaged(true);
     }
 
     private void startRecording() {

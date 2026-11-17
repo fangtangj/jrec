@@ -427,6 +427,35 @@
 }
 
 
+
+/* the shortcut recorder reads as a readout, not as something to type into */
+.hotkey-field {
+    -fx-background-color: #17140E;
+    -fx-background-radius: 3;
+    -fx-border-color: #322C22;
+    -fx-border-radius: 3;
+    -fx-border-width: 1;
+    -fx-text-fill: #F7F4EC;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 12px;
+    -fx-padding: 6 10 6 10;
+    -fx-prompt-text-fill: #6E695C;
+}
+
+.hotkey-field:focused {
+    -fx-border-color: #E2400F;
+}
+
+.field-note {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #8B8779;
+}
+
+.field-error {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #E8935A;
+}
+
 /* ══════════════ floating control bar ══════════════ */
 
 .bar-root {

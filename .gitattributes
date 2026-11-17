@@ -1,7 +1,13 @@
 # Normalise line endings so a clone on Linux/macOS matches the committed bytes.
 * text=auto eol=lf
 
+# Batch files must keep CRLF. cmd.exe looks for labels at the start of a line and a
+# file normalised to LF breaks goto/if-goto in ways that only show up on a user's machine.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 *.png binary
+*.ico binary
 *.jpg binary
 *.jar binary
 *.exe binary

@@ -44,6 +44,20 @@
           <mainClass>com.rzx.jrec.desktop.JRecApp</mainClass>
         </configuration>
       </plugin>
+      <!-- The packaged build puts every jar in one folder and relies on the Class-Path
+           entry, so jpackage needs only the main jar and a directory of siblings. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <addClasspath>true</addClasspath>
+              <mainClass>com.rzx.jrec.desktop.Launcher</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>

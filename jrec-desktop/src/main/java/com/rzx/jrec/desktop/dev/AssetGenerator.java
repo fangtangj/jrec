@@ -9,6 +9,8 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -43,6 +45,7 @@ public final class AssetGenerator {
         Files.createDirectories(out);
         writeGrid(out.resolve("grid.png"));
         writeIcon(out.resolve("app-icon.png"));
+        writeIco(out.resolve("app-icon.ico"), out.resolve("app-icon.png"));
         System.out.println("资源已写入 " + out.toAbsolutePath());
     }
 
@@ -74,5 +77,31 @@ public final class AssetGenerator {
 
         g.dispose();
         ImageIO.write(icon, "png", target.toFile());
+    }
+
+    /**
+     * Wraps the 256px PNG in an ICO container so jpackage can stamp the executable.
+     * <p>
+     * Windows has accepted PNG-compressed icon frames since Vista, so the file is a 6-byte
+     * header, one 16-byte directory entry, then the PNG untouched. Hand-rolled because the
+     * JDK ships no ICO writer and adding an image library for one 256px frame is not worth
+     * the dependency.
+     */
+    private static void writeIco(Path target, Path png) throws IOException {
+        byte[] pngBytes = Files.readAllBytes(png);
+        ByteBuffer buffer = ByteBuffer.allocate(22 + pngBytes.length).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.putShort((short) 0);   // reserved
+        buffer.putShort((short) 1);   // type: icon
+        buffer.putShort((short) 1);   // one frame
+        buffer.put((byte) 0);         // width 0 == 256
+        buffer.put((byte) 0);         // height 0 == 256
+        buffer.put((byte) 0);         // palette size
+        buffer.put((byte) 0);         // reserved
+        buffer.putShort((short) 1);   // colour planes
+        buffer.putShort((short) 32);  // bits per pixel
+        buffer.putInt(pngBytes.length);
+        buffer.putInt(22);            // offset to image data
+        buffer.put(pngBytes);
+        Files.write(target, buffer.array());
     }
 }

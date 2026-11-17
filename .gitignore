@@ -2,6 +2,9 @@
 target/
 *.class
 
+# The packaged app image: 139 MB of bundled runtime, rebuilt by build-dist.bat
+dist/
+
 # Local tooling: the downloaded FFmpeg binary and scratch recordings never belong in git
 .cache/
 *.log
