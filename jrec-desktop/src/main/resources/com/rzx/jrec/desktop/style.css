@@ -1,345 +1,144 @@
-/* ══════════════════════════════════════════════════════════
-   JRec desktop — precision instrument.
-
-   Same language as the product page: warm ink ground, one signal
-   colour, hairline rules, a margin rail, dot-field texture.
-   JavaFX CSS has no letter-spacing, no box-shadow and no flexbox,
-   so tracking is faked with thin spaces and depth comes from
-   -fx-effect instead of shadows.
-   ══════════════════════════════════════════════════════════ */
+/*
+ * JRec — light theme.
+ *
+ * The window used to be dark. Three passes of dark produced the same complaint, and the
+ * reason is visible in any screenshot: the app previews the desktop, so a dark shell plus
+ * a dark picture plus a dark footer collapse into one grey mass — and the one accent
+ * colour is already spent by whatever the preview happens to show.
+ *
+ * Warm paper ground, white sheet, dark viewport. The preview is now the only dark area on
+ * screen, which makes it what the eye lands on without any decoration, and orange is used
+ * exactly twice: the record key, and the dot that says a take is running.
+ */
 
 .root {
-    -fx-font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-    -fx-background-color: linear-gradient(to bottom, #14120C 0%, #0C0B08 100%);
-    -fx-background-image: url("grid.png");
-    -fx-background-repeat: repeat;
-    -fx-background-size: 24 24;
-    -fx-background-position: 0 0;
-    -fx-text-fill: #EFEBE3;
+    -fx-background-color: #F2EEE5;
+    -fx-font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #17150F;
 }
 
 /* ══════════════ header ══════════════ */
 
 .app-header {
-    -fx-padding: 0 0 13 0;
-    -fx-border-color: transparent transparent #2A2620 transparent;
-    -fx-border-width: 0 0 1 0;
-}
-
-.mark-rule {
-    -fx-background-color: #E2400F;
+    -fx-padding: 0 2 16 2;
 }
 
 .brand {
     -fx-font-family: "Bahnschrift";
     -fx-font-size: 15px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #F7F4EC;
+    -fx-text-fill: #17150F;
 }
 
 .brand-sep {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 10px;
-    -fx-text-fill: #443F35;
+    -fx-font-size: 12px;
+    -fx-text-fill: #C6BDAA;
 }
 
 .tagline {
-    -fx-font-size: 10px;
-    -fx-text-fill: #6E6A5D;
+    -fx-font-size: 12px;
+    -fx-text-fill: #8A8375;
 }
 
 .chip {
-    -fx-background-color: rgba(20, 18, 12, 0.7);
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: #2A2620;
-    -fx-border-width: 1;
-    -fx-padding: 3 10 3 10;
     -fx-font-family: "Consolas";
     -fx-font-size: 9.5px;
-    -fx-text-fill: #8B8779;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-padding: 3 10 3 10;
+    -fx-text-fill: #6B6558;
+    -fx-background-color: #EFE9DB;
+    -fx-border-color: #E0D8C7;
 }
 
 .chip-ok {
-    -fx-text-fill: #86A98C;
-    -fx-border-color: #2C3B2E;
+    -fx-text-fill: #4A6B3A;
+    -fx-background-color: #EAF0E4;
+    -fx-border-color: #D5E0C9;
 }
 
 .chip-warn {
-    -fx-text-fill: #D29A55;
-    -fx-border-color: #41331F;
+    -fx-text-fill: #B4551F;
+    -fx-background-color: #FBEDE6;
+    -fx-border-color: #F0D5C7;
 }
 
-/* ══════════════ numbered sections ══════════════ */
+/* ══════════════ the capture sheet ══════════════ */
 
-.sec {
-    -fx-padding: 15 0 16 0;
-    -fx-border-color: transparent transparent #1E1B15 transparent;
-    -fx-border-width: 0 0 1 0;
-}
-
-.sec-end {
-    -fx-border-color: transparent;
-    -fx-padding: 15 0 0 0;
-}
-
-/* the margin rail: one continuous hairline running the height of every section */
-.rail {
-    -fx-background-color: #221F19;
-    -fx-min-width: 1;
-    -fx-pref-width: 1;
-    -fx-max-width: 1;
-}
-
-.sec-num {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
-    -fx-text-fill: #4E4A3F;
-    -fx-padding: 0 14 0 0;
-}
-
-.sec-body {
-    -fx-padding: 0 0 0 14;
-}
-
-.sec-cap {
-    -fx-font-size: 10.5px;
-    -fx-text-fill: #8B8779;
-}
-
-.sec-en {
-    -fx-font-family: "Bahnschrift";
-    -fx-font-size: 9px;
-    -fx-text-fill: #6A6355;
-}
-
-.field-label {
-    -fx-font-size: 10px;
-    -fx-text-fill: #6E6A5D;
-    -fx-padding: 0 0 0 1;
-}
-
-.readout {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 11px;
-    -fx-text-fill: #9A9484;
-}
-
-.hint {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9px;
-    -fx-text-fill: #554F43;
-}
-
-.warn-link {
-    -fx-font-size: 10.5px;
-    -fx-text-fill: #D29A55;
-    -fx-cursor: hand;
-}
-
-.warn-link:hover {
-    -fx-text-fill: #F0BC79;
-    -fx-underline: true;
-}
-
-/* ══════════════ segmented tabs ══════════════ */
-
-.seg {
-    -fx-background-color: transparent;
-    -fx-background-radius: 0;
-    -fx-border-color: transparent transparent #241F19 transparent;
-    -fx-border-width: 0 0 2 0;
-    -fx-text-fill: #7E7969;
-    -fx-font-size: 12px;
-    -fx-padding: 6 0 8 0;
-    -fx-cursor: hand;
-}
-
-.seg:hover {
-    -fx-text-fill: #C9C3B4;
-}
-
-.seg:selected {
-    -fx-text-fill: #F7F4EC;
-    -fx-border-color: transparent transparent #E2400F transparent;
-}
-
-/* ══════════════ buttons ══════════════ */
-
-.btn-ghost {
-    -fx-background-color: rgba(27, 24, 18, 0.6);
-    -fx-background-radius: 3;
-    -fx-border-color: #2E2A22;
+.capture-card {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 18;
+    -fx-border-color: #EDE6D6;
+    -fx-border-radius: 18;
     -fx-border-width: 1;
-    -fx-border-radius: 3;
-    -fx-text-fill: #B6B0A1;
-    -fx-font-size: 11px;
-    -fx-padding: 6 12 6 12;
-    -fx-cursor: hand;
+    -fx-padding: 14;
+    -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.10), 26, 0.06, 0, 8);
 }
 
-.btn-ghost:hover {
-    -fx-border-color: #E2400F;
-    -fx-text-fill: #F7F4EC;
+.capture-toolbar {
+    -fx-padding: 0 2 0 2;
 }
 
-/* A key, not a banner: lit from above, sitting on its own glow. */
-.btn-record {
-    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
-    -fx-background-radius: 4;
-    -fx-text-fill: #FFF6F0;
-    -fx-font-size: 13.5px;
-    -fx-font-weight: bold;
-    -fx-padding: 15 0 15 0;
-    -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.30), 20, 0.15, 0, 7);
-}
+/* ══════════════ segmented control ══════════════ */
 
-.btn-record:hover {
-    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
-    -fx-effect: dropshadow(gaussian, rgba(255, 90, 34, 0.44), 26, 0.2, 0, 8);
-}
-
-.btn-record:pressed {
-    -fx-background-color: linear-gradient(to bottom, #BC3108 0%, #9E2906 100%);
-    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.14), 8, 0, 0, 2);
-    -fx-translate-y: 1;
-}
-
-.btn-record:disabled {
-    -fx-opacity: 0.45;
-    -fx-effect: none;
-}
-
-.btn-stop {
-    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
-    -fx-background-radius: 4;
-    -fx-text-fill: #FFF6F0;
-    -fx-font-size: 13.5px;
-    -fx-font-weight: bold;
-    -fx-padding: 14 0 14 0;
-    -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.30), 18, 0.15, 0, 6);
-}
-
-.btn-stop:hover {
-    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
-}
-
-.btn-stop:pressed {
-    -fx-translate-y: 1;
-    -fx-effect: none;
-}
-
-/* ══════════════ inputs ══════════════ */
-
-.combo {
-    -fx-background-color: rgba(27, 24, 18, 0.72);
-    -fx-background-radius: 3;
-    -fx-border-color: #2A2620;
-    -fx-border-width: 1;
-    -fx-border-radius: 3;
-    -fx-font-size: 11.5px;
-    -fx-cursor: hand;
-}
-
-.combo:hover {
-    -fx-border-color: #3C362B;
-}
-
-.combo:focused {
-    -fx-border-color: #E2400F;
-}
-
-.combo .list-cell {
-    -fx-background-color: transparent;
-    -fx-text-fill: #C9C3B4;
-    -fx-padding: 2 4 2 8;
-}
-
-.combo .arrow {
-    -fx-background-color: #6E6A5D;
-}
-
-.combo-box-popup .list-view {
-    -fx-background-color: #1B1812;
-    -fx-background-radius: 3;
-    -fx-border-color: #2A2620;
-    -fx-border-width: 1;
-    -fx-border-radius: 3;
+.segmented {
+    -fx-background-color: #F1EBDE;
+    -fx-background-radius: 9;
     -fx-padding: 3;
 }
 
-.combo-box-popup .list-view .list-cell {
+.pill {
     -fx-background-color: transparent;
-    -fx-text-fill: #C9C3B4;
+    -fx-background-radius: 7;
+    -fx-text-fill: #6B6558;
     -fx-font-size: 11.5px;
-    -fx-padding: 7 10 7 10;
+    -fx-padding: 5 15 5 15;
+    -fx-cursor: hand;
 }
 
-.combo-box-popup .list-view .list-cell:hover {
-    -fx-background-color: #26221A;
+.pill:hover {
+    -fx-text-fill: #17150F;
 }
 
-.combo-box-popup .list-view .list-cell:filled:selected {
-    -fx-background-color: #2E2A22;
-    -fx-text-fill: #F7F4EC;
+.pill:selected {
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #17150F;
+    -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.14), 5, 0.05, 0, 1);
 }
 
-.text-field {
-    -fx-background-color: rgba(27, 24, 18, 0.72);
-    -fx-background-radius: 3;
-    -fx-border-color: #2A2620;
-    -fx-border-width: 1;
-    -fx-border-radius: 3;
-    -fx-text-fill: #B6B0A1;
-    -fx-font-family: "Consolas";
-    -fx-font-size: 11px;
-    -fx-padding: 8 10 8 10;
-    -fx-prompt-text-fill: #554F43;
-}
-
-.text-field:focused {
-    -fx-border-color: #E2400F;
-}
-
-
-/* ══════════════ viewfinder stage ══════════════ */
+/* ══════════════ the viewport ══════════════ */
 
 .stage {
-    -fx-background-color: #0D0B08;
-    -fx-background-radius: 6;
-    -fx-border-color: #2A2620;
-    -fx-border-width: 1;
-    -fx-border-radius: 6;
-    -fx-padding: 1;
+    -fx-background-color: #100E0B;
+    -fx-background-radius: 10;
 }
 
 .viewfinder {
-    -fx-background-color: #0B0A07;
-    -fx-background-radius: 5;
+    -fx-background-color: #0B0A08;
 }
 
 .vf-chip {
     -fx-font-family: "Consolas";
     -fx-font-size: 9.5px;
-    -fx-text-fill: #C9C3B4;
-    -fx-background-color: rgba(11, 10, 7, 0.74);
-    -fx-background-radius: 3;
+    -fx-text-fill: #D8D2C4;
+    -fx-background-color: rgba(11, 10, 8, 0.66);
+    -fx-background-radius: 4;
     -fx-padding: 3 8 3 8;
 }
 
 .vf-live {
     -fx-font-family: "Bahnschrift";
     -fx-font-size: 9px;
-    -fx-text-fill: #FF8B6E;
-    -fx-background-color: rgba(11, 10, 7, 0.74);
-    -fx-background-radius: 3;
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: rgba(11, 10, 8, 0.60);
+    -fx-background-radius: 4;
     -fx-padding: 3 8 3 8;
 }
 
+/* Corner ticks are white, not orange: the key owns the accent. */
 .vf-corner {
-    -fx-border-color: rgba(226, 64, 15, 0.62);
+    -fx-border-color: rgba(255, 255, 255, 0.34);
     -fx-border-width: 0;
 }
 
@@ -348,72 +147,23 @@
 .vf-corner.bl { -fx-border-width: 0 0 1 1; }
 .vf-corner.br { -fx-border-width: 0 1 1 0; }
 
-/* ══════════════ mode pills over the preview ══════════════ */
-
-.pill {
-    -fx-background-color: rgba(14, 12, 9, 0.80);
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(255, 255, 255, 0.12);
-    -fx-border-width: 1;
-    -fx-text-fill: #B6B0A1;
-    -fx-font-size: 11px;
-    -fx-padding: 5 13 5 13;
-    -fx-cursor: hand;
-}
-
-.pill:hover {
-    -fx-text-fill: #F7F4EC;
-    -fx-border-color: rgba(255, 255, 255, 0.26);
-}
-
-.pill:selected {
-    -fx-background-color: rgba(226, 64, 15, 0.94);
-    -fx-border-color: #FF6A32;
-    -fx-text-fill: #FFF6F0;
-}
-
-/* ══════════════ transport deck ══════════════ */
+/* ══════════════ transport ══════════════ */
 
 .deck {
-    -fx-background-color: linear-gradient(to top,
-        rgba(8, 7, 5, 0.97) 0%,
-        rgba(8, 7, 5, 0.92) 55%,
-        rgba(8, 7, 5, 0.0) 100%);
-    -fx-padding: 40 18 14 16;
-}
-
-.deck-label {
-    -fx-font-size: 14.5px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #F7F4EC;
-}
-
-.deck-spec {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
-    -fx-text-fill: #8B8779;
+    -fx-padding: 0 2 2 2;
 }
 
 .rec-circle {
-    -fx-min-width: 54;
-    -fx-min-height: 54;
-    -fx-pref-width: 54;
-    -fx-pref-height: 54;
-    -fx-max-width: 54;
-    -fx-max-height: 54;
+    -fx-background-color: #E2400F;
     -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(255, 244, 238, 0.60);
-    -fx-border-width: 3;
-    -fx-background-color: linear-gradient(to bottom, #F4521E 0%, #D0380A 100%);
-    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.48), 18, 0.2, 0, 4);
+    -fx-padding: 11 24 11 20;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.28), 12, 0.1, 0, 3);
 }
 
 .rec-circle:hover {
-    -fx-background-color: linear-gradient(to bottom, #FF6A32 0%, #E2400F 100%);
-    -fx-effect: dropshadow(gaussian, rgba(255, 90, 34, 0.62), 24, 0.25, 0, 5);
+    -fx-background-color: #F04B16;
+    -fx-effect: dropshadow(gaussian, rgba(226, 64, 15, 0.36), 16, 0.12, 0, 4);
 }
 
 .rec-circle:pressed {
@@ -422,50 +172,381 @@
 }
 
 .rec-circle:disabled {
-    -fx-opacity: 0.42;
+    -fx-opacity: 0.45;
     -fx-effect: none;
 }
 
+.deck-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #FFFFFF;
+}
 
+.deck-spec {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10px;
+    -fx-text-fill: #8A8375;
+}
 
-/* the shortcut recorder reads as a readout, not as something to type into */
-.hotkey-field {
-    -fx-background-color: #17140E;
-    -fx-background-radius: 3;
-    -fx-border-color: #322C22;
-    -fx-border-radius: 3;
+.btn-ghost {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-color: #DCD4C3;
     -fx-border-width: 1;
-    -fx-text-fill: #F7F4EC;
+    -fx-text-fill: #4B463A;
+    -fx-font-size: 11.5px;
+    -fx-padding: 6 13 6 13;
+    -fx-cursor: hand;
+}
+
+.btn-ghost:hover {
+    -fx-background-color: #F7F2E7;
+    -fx-border-color: #C9C0AC;
+}
+
+.key-hint {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #6B6558;
+    -fx-background-color: #F1EBDD;
+    -fx-background-radius: 6;
+    -fx-border-color: #E0D8C7;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
+    -fx-padding: 4 8 4 8;
+}
+
+.key-hint-off {
+    -fx-text-fill: #B4551F;
+    -fx-border-color: #EBD4C4;
+}
+
+/* ══════════════ recent recordings ══════════════ */
+
+.history-scroll {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.history-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.history-scroll .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 8;
+}
+
+.history-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: #D8D0BF;
+    -fx-background-radius: 4;
+}
+
+.history-row {
+    -fx-padding: 9 2 9 2;
+    -fx-border-color: transparent transparent #ECE5D6 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.history-empty {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: #A09684;
+    -fx-padding: 10 2 10 2;
+}
+
+.file-name {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #17150F;
+}
+
+.file-meta {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #8A8375;
+}
+
+.link-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #6B6558;
+    -fx-font-size: 11px;
+    -fx-padding: 3 8 3 8;
+    -fx-cursor: hand;
+}
+
+.link-btn:hover {
+    -fx-text-fill: #E2400F;
+    -fx-underline: true;
+}
+
+/* ══════════════ settings sheet ══════════════ */
+
+.settings-pane {
+    -fx-background-color: #FAF6EC;
+}
+
+.settings-pane > .content {
+    -fx-padding: 4 12 2 12;
+}
+
+.settings-pane .button-bar .button {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #DCD4C3;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-text-fill: #4B463A;
+    -fx-padding: 6 20 6 20;
+    -fx-cursor: hand;
+}
+
+.settings-pane .button-bar .button:hover {
+    -fx-background-color: #F2ECE0;
+}
+
+.sec {
+    -fx-padding: 15 0 14 0;
+    -fx-border-color: transparent transparent #E8E1D2 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.sec-num {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #B3AA97;
+    -fx-padding: 0 14 0 0;
+}
+
+.rail {
+    -fx-background-color: #DED5C2;
+    -fx-min-width: 1;
+    -fx-pref-width: 1;
+    -fx-max-width: 1;
+}
+
+.sec-body {
+    -fx-padding: 0 0 0 15;
+}
+
+.sec-cap {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #17150F;
+}
+
+.sec-en {
+    -fx-font-family: "Bahnschrift";
+    -fx-font-size: 9px;
+    -fx-text-fill: #B3AA97;
+}
+
+.field-label {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #8A8375;
+}
+
+.field-note {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #8A8375;
+}
+
+.field-error {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #B4551F;
+}
+
+.warn-link {
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #B4551F;
+    -fx-cursor: hand;
+}
+
+.warn-link:hover {
+    -fx-text-fill: #E2400F;
+    -fx-underline: true;
+}
+
+.hint {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 9.5px;
+    -fx-text-fill: #A79E8B;
+}
+
+.combo {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 7;
+    -fx-border-color: #DDD5C5;
+    -fx-border-radius: 7;
+    -fx-border-width: 1;
+    -fx-padding: 2 2 2 4;
+}
+
+.combo:focused {
+    -fx-border-color: #E2400F;
+}
+
+.combo .list-cell {
+    -fx-text-fill: #17150F;
+    -fx-font-size: 11.5px;
+    -fx-background-color: transparent;
+    -fx-padding: 3 4 3 4;
+}
+
+.combo .arrow {
+    -fx-background-color: #8A8375;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #DDD5C5;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.16), 12, 0.05, 0, 4);
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #17150F;
+    -fx-font-size: 11.5px;
+    -fx-padding: 6 10 6 10;
+}
+
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: #F3EEE3;
+}
+
+.combo-box-popup .list-cell:selected {
+    -fx-background-color: #F3EEE3;
+    -fx-text-fill: #17150F;
+}
+
+.text-field {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 7;
+    -fx-border-color: #DDD5C5;
+    -fx-border-radius: 7;
+    -fx-border-width: 1;
+    -fx-text-fill: #17150F;
+    -fx-font-size: 11.5px;
+    -fx-padding: 6 9 6 9;
+}
+
+.text-field:focused {
+    -fx-border-color: #E2400F;
+}
+
+.hotkey-field {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 7;
+    -fx-border-color: #DDD5C5;
+    -fx-border-radius: 7;
+    -fx-border-width: 1;
+    -fx-text-fill: #17150F;
     -fx-font-family: "Consolas";
     -fx-font-size: 12px;
     -fx-padding: 6 10 6 10;
-    -fx-prompt-text-fill: #6E695C;
+    -fx-prompt-text-fill: #A79E8B;
 }
 
 .hotkey-field:focused {
     -fx-border-color: #E2400F;
 }
 
-.field-note {
-    -fx-font-size: 10.5px;
-    -fx-text-fill: #8B8779;
+/* ══════════════ recording state ══════════════ */
+
+.rec-card {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 18;
+    -fx-padding: 34 44 30 44;
+    -fx-effect: dropshadow(gaussian, rgba(38, 32, 20, 0.12), 30, 0.06, 0, 10);
 }
 
-.field-error {
-    -fx-font-size: 10.5px;
-    -fx-text-fill: #E8935A;
+.rec-pill {
+    -fx-background-color: #FBEAE2;
+    -fx-background-radius: 999;
+    -fx-padding: 4 11 4 9;
 }
 
-/* ══════════════ floating control bar ══════════════ */
+.rec-pill-text {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10px;
+    -fx-text-fill: #C6360B;
+}
+
+.timer {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 56px;
+    -fx-text-fill: #17150F;
+}
+
+.rec-spec {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10px;
+    -fx-text-fill: #8A8375;
+}
+
+.rec-file {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 10.5px;
+    -fx-text-fill: #4B463A;
+}
+
+.tick {
+    -fx-background-color: #EDE6D5;
+    -fx-background-radius: 2;
+    -fx-min-width: 5;
+    -fx-pref-width: 5;
+    -fx-min-height: 16;
+    -fx-pref-height: 16;
+}
+
+.tick:lit {
+    -fx-background-color: #E2400F;
+}
+
+.btn-stop {
+    -fx-background-color: #17150F;
+    -fx-background-radius: 999;
+    -fx-text-fill: #FFFFFF;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 22 10 22;
+    -fx-cursor: hand;
+}
+
+.btn-stop:hover {
+    -fx-background-color: #322D22;
+}
+
+/* ══════════════ toast ══════════════ */
+
+.toast {
+    -fx-background-color: #17150F;
+    -fx-background-radius: 8;
+    -fx-text-fill: #F7F1E4;
+    -fx-font-size: 11.5px;
+    -fx-padding: 8 16 8 16;
+    -fx-effect: dropshadow(gaussian, rgba(28, 24, 16, 0.30), 16, 0.1, 0, 6);
+}
+
+.toast-error {
+    -fx-background-color: #C6360B;
+    -fx-text-fill: #FFFFFF;
+}
+
+/* ══════════════ floating bar stays dark ══════════════
+   It floats over whatever is on screen, which is often darker than this app and
+   sometimes lighter. A dark plate with a white timer reads on both; a paper one
+   disappears over a document. */
 
 .bar-root {
-    -fx-background-color: rgba(16, 14, 10, 0.94);
-    -fx-background-radius: 9;
+    -fx-background-color: rgba(18, 16, 12, 0.95);
+    -fx-background-radius: 10;
     -fx-border-color: #3E3729;
-    -fx-border-radius: 9;
+    -fx-border-radius: 10;
     -fx-border-width: 1;
     -fx-padding: 9 12 9 14;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.62), 26, 0.2, 0, 8);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 22, 0.18, 0, 6);
     -fx-cursor: move;
 }
 
@@ -499,7 +580,7 @@
 
 .bar-close {
     -fx-background-color: transparent;
-    -fx-text-fill: #7E7969;
+    -fx-text-fill: #9A9483;
     -fx-font-size: 13px;
     -fx-padding: 0 4 2 4;
     -fx-cursor: hand;
@@ -507,223 +588,4 @@
 
 .bar-close:hover {
     -fx-text-fill: #F7F4EC;
-}
-
-/* the shortcut, printed where the action is */
-.key-hint {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9px;
-    -fx-text-fill: #8B8779;
-    -fx-background-color: rgba(20, 18, 12, 0.72);
-    -fx-background-radius: 3;
-    -fx-border-color: #2E2A22;
-    -fx-border-radius: 3;
-    -fx-border-width: 1;
-    -fx-padding: 3 7 3 7;
-}
-
-.key-hint-off {
-    -fx-text-fill: #D29A55;
-    -fx-border-color: #41331F;
-}
-
-/* ══════════════ settings sheet ══════════════ */
-
-.settings-pane {
-    -fx-background-color: #100E09;
-}
-
-.settings-pane > .content {
-    -fx-padding: 4 10 2 10;
-}
-
-.settings-pane .button-bar .button {
-    -fx-background-color: #2A2620;
-    -fx-text-fill: #D6D0C2;
-    -fx-background-radius: 3;
-    -fx-padding: 6 18 6 18;
-    -fx-cursor: hand;
-}
-
-/* ══════════════ recording state ══════════════ */
-
-.rec-card {
-    -fx-background-color: linear-gradient(to bottom, #1A1710 0%, #141209 100%);
-    -fx-background-radius: 4;
-    -fx-border-color: #2E2A22;
-    -fx-border-width: 1;
-    -fx-border-radius: 4;
-    -fx-padding: 26 30 24 30;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 34, 0.1, 0, 12);
-}
-
-.rec-pill {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9px;
-    -fx-text-fill: #FF8B6E;
-    -fx-background-color: #2A1510;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: #5C2A1C;
-    -fx-border-width: 1;
-    -fx-padding: 3 10 3 10;
-}
-
-.timer {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 58px;
-    -fx-text-fill: #F7F4EC;
-}
-
-.rec-spec {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 10.5px;
-    -fx-text-fill: #8B8779;
-}
-
-.rec-file {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
-    -fx-text-fill: #554F43;
-}
-
-/* the tally strip: one bar per second of the current half-minute */
-.tick {
-    -fx-background-color: #363026;
-    -fx-background-radius: 1;
-    -fx-min-width: 4;
-    -fx-pref-width: 4;
-    -fx-min-height: 14;
-    -fx-pref-height: 14;
-}
-
-.tick:lit {
-    -fx-background-color: #E2400F;
-}
-
-/* ══════════════ history ══════════════ */
-
-.history-scroll {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
-    -fx-padding: 0;
-}
-
-.history-scroll > .viewport {
-    -fx-background-color: transparent;
-}
-
-.history-row {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent transparent #1C1913 transparent;
-    -fx-border-width: 0 0 1 0;
-    -fx-padding: 9 2 9 2;
-}
-
-.history-row:hover {
-    -fx-background-color: rgba(226, 64, 15, 0.055);
-}
-
-.file-name {
-    -fx-font-size: 11.5px;
-    -fx-text-fill: #C9C3B4;
-}
-
-.file-meta {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 9.5px;
-    -fx-text-fill: #6E6A5D;
-}
-
-.link-btn {
-    -fx-background-color: transparent;
-    -fx-text-fill: #8B8779;
-    -fx-font-size: 10.5px;
-    -fx-padding: 2 6 2 6;
-    -fx-cursor: hand;
-}
-
-.link-btn:hover {
-    -fx-text-fill: #E2400F;
-}
-
-/* ══════════════ misc ══════════════ */
-
-.scroll-bar:vertical {
-    -fx-background-color: transparent;
-    -fx-pref-width: 8;
-}
-
-.scroll-bar:vertical .thumb {
-    -fx-background-color: #2E2A22;
-    -fx-background-radius: 4;
-}
-
-.scroll-bar:vertical .track {
-    -fx-background-color: transparent;
-}
-
-.scroll-bar .increment-button,
-.scroll-bar .decrement-button {
-    -fx-background-color: transparent;
-    -fx-pref-height: 0;
-}
-
-.scroll-bar .increment-arrow,
-.scroll-bar .decrement-arrow {
-    -fx-shape: " ";
-    -fx-padding: 0;
-}
-
-.toast {
-    -fx-background-color: #1B1812;
-    -fx-background-radius: 3;
-    -fx-border-radius: 3;
-    -fx-border-color: #3C362B;
-    -fx-border-width: 1;
-    -fx-padding: 9 14 9 14;
-    -fx-font-size: 11.5px;
-    -fx-text-fill: #D6D0C2;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 20, 0.1, 0, 6);
-}
-
-.toast-error {
-    -fx-background-color: #241310;
-    -fx-border-color: #6B2A1C;
-    -fx-text-fill: #FFB3A0;
-}
-
-/* ══════════════ dialogs ══════════════ */
-
-.dialog-pane {
-    -fx-background-color: #17140E;
-}
-
-.dialog-pane .header-panel {
-    -fx-background-color: #1B1812;
-}
-
-.dialog-pane .label,
-.dialog-pane .header-panel .label {
-    -fx-text-fill: #D6D0C2;
-}
-
-.dialog-pane > .content.label {
-    -fx-text-fill: #B6B0A1;
-}
-
-.dialog-pane .text-area {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 11px;
-    -fx-text-fill: #B6B0A1;
-}
-
-.dialog-pane .text-area .content {
-    -fx-background-color: #1B1812;
-}
-
-.dialog-pane .button {
-    -fx-background-color: #2A2620;
-    -fx-text-fill: #D6D0C2;
-    -fx-background-radius: 3;
 }

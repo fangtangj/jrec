@@ -110,7 +110,15 @@ public final class ScreenPreview extends StackPane {
     /** {@code null} previews the whole desktop; a rect previews just that region. */
     public void setArea(Rect area) {
         this.area = area;
-        sizeChip.setText(area == null ? "全屏" : area.width() + " × " + area.height());
+        // The chip reports pixels, not the mode: the segmented control already says
+        // "全屏", and repeating it here just gives the eye a second thing to read.
+        if (area != null) {
+            sizeChip.setText(area.width() + " × " + area.height());
+            return;
+        }
+        java.awt.Rectangle screen = java.awt.GraphicsEnvironment
+                .getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        sizeChip.setText(screen.width + " × " + screen.height);
     }
 
     public void setCaption(String text) {

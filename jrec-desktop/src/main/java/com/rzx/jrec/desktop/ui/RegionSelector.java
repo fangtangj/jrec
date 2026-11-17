@@ -8,6 +8,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -161,11 +162,24 @@ public final class RegionSelector {
             g.fillRect(x + sw - corner, y + sh - corner, corner * 2, corner * 2);
 
             String label = (int) sw + " × " + (int) sh;
-            g.setFont(Font.font("Segoe UI", FontWeight.SEMI_BOLD, 13));
-            g.setFill(Color.WHITE);
-            double labelY = y > 28 ? y - 8 : y + sh + 20;
+            Font font = Font.font("Segoe UI", FontWeight.SEMI_BOLD, 12);
+            g.setFont(font);
             g.setTextAlign(TextAlignment.LEFT);
-            g.fillText(label, x + 2, labelY);
+
+            // The label sits on top of whatever is behind the overlay, which on a bright
+            // desktop is not far from white. A dark plate makes it readable everywhere
+            // instead of only over dark windows.
+            Text measure = new Text(label);
+            measure.setFont(font);
+            double textWidth = measure.getLayoutBounds().getWidth();
+            double labelY = y > 30 ? y - 10 : y + sh + 22;
+            double plateX = x + 1;
+            double plateY = labelY - 13;
+
+            g.setFill(Color.rgb(18, 16, 12, 0.86));
+            g.fillRoundRect(plateX, plateY, textWidth + 14, 19, 4, 4);
+            g.setFill(Color.WHITE);
+            g.fillText(label, plateX + 7, labelY);
         } else {
             g.setFont(Font.font("Segoe UI", FontWeight.SEMI_BOLD, 18));
             g.setFill(Color.rgb(255, 255, 255, 0.92));

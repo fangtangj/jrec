@@ -103,7 +103,7 @@ mvn javafx:run -Djrec.ffmpeg=/path/to/ffmpeg
 ```
 jrec/
 ├── jrec-core/       录制引擎：FFmpeg 定位与下载、音频设备探测、命令行拼装、进程生命周期
-└── jrec-desktop/    JavaFX 客户端：取景器主界面、悬浮控制条、区域框选遮罩、录制历史
+└── jrec-desktop/    JavaFX 客户端：预览主界面、悬浮控制条、区域框选遮罩、录制历史
 ```
 
 核心类：

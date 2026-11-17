@@ -127,6 +127,7 @@ public class JRecApp extends Application {
 
     private Label timerLabel;
     private Label recordingFileLabel;
+    private Label recStopHint;
     private Label recordingCaption;
     private Label toast;
     private VBox historyBox;
@@ -146,7 +147,7 @@ public class JRecApp extends Application {
         this.stage = primaryStage;
         buildUi();
 
-        Scene scene = new Scene(root, 920, 700);
+        Scene scene = new Scene(root, 940, 720);
         scene.getStylesheets().add(getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
         stage.setScene(scene);
 
@@ -157,8 +158,8 @@ public class JRecApp extends Application {
         refreshHistory();
         probeFfmpegAsync();
         stage.setTitle("JRec — 屏幕录制");
-        stage.setMinWidth(820);
-        stage.setMinHeight(600);
+        stage.setMinWidth(900);
+        stage.setMinHeight(640);
         stage.setOnCloseRequest(e -> {
             if (recorder.isRecording()) {
                 e.consume();
@@ -209,7 +210,7 @@ public class JRecApp extends Application {
     private void buildUi() {
         root = new StackPane();
         root.getStyleClass().add("root");
-        root.setPadding(new Insets(16, 24, 14, 24));
+        root.setPadding(new Insets(20, 28, 22, 28));
 
         // Built up front so a recording started before the settings sheet is ever
         // opened still reads real values instead of nulls.
@@ -217,15 +218,15 @@ public class JRecApp extends Application {
         controlBar = new ControlBar();
 
         VBox history = historySection();
-        StackPane stagePane = previewStage();
+        VBox card = captureCard();
 
         configView = new VBox(0);
         configView.getChildren().addAll(
                 header(),
-                stagePane,
+                card,
                 history
         );
-        VBox.setVgrow(stagePane, Priority.ALWAYS);
+        VBox.setVgrow(card, Priority.ALWAYS);
         updateRegionUi();
 
         recordingView = buildRecordingView();
@@ -262,19 +263,52 @@ public class JRecApp extends Application {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox topRow = new HBox(12, left, spacer, ffmpegChip);
+        Button settings = new Button("设置");
+        settings.getStyleClass().add("btn-ghost");
+        settings.setOnAction(e -> settingsDialog.showAndWait());
+
+        HBox topRow = new HBox(10, left, spacer, ffmpegChip, settings);
         topRow.setAlignment(Pos.CENTER_LEFT);
 
-        // A short signal bar under the wordmark: the one loud gesture in the header.
-        Region rule = new Region();
-        rule.getStyleClass().add("mark-rule");
-        rule.setMinSize(30, 2);
-        rule.setPrefSize(30, 2);
-        rule.setMaxSize(30, 2);
-
-        VBox box = new VBox(9, topRow, rule);
+        VBox box = new VBox(topRow);
         box.getStyleClass().add("app-header");
         return box;
+    }
+
+    /**
+     * One white sheet holding the three things a recorder actually is: what to capture,
+     * the picture of it, and the button that starts.
+     * <p>
+     * The transport used to lie on top of the preview under a gradient scrim, which left a
+     * hard seam across the picture and put the record key on top of the very thing the user
+     * wants to look at. Separating them costs nothing and fixes both.
+     */
+    private VBox captureCard() {
+        StackPane stagePane = previewStage();
+        VBox.setVgrow(stagePane, Priority.ALWAYS);
+        stagePane.setMinHeight(0);
+
+        HBox toolbar = toolbarRow();
+        HBox footer = deck();
+
+        VBox card = new VBox(12, toolbar, stagePane, footer);
+        card.getStyleClass().add("capture-card");
+        card.setMinHeight(0);
+        return card;
+    }
+
+    /** What kind of capture, and what the next take will contain. */
+    private HBox toolbarRow() {
+        deckSpec = new Label();
+        deckSpec.getStyleClass().add("deck-spec");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox row = new HBox(12, modeSwitch(), spacer, deckSpec);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("capture-toolbar");
+        return row;
     }
 
     private void createControls() {
@@ -330,20 +364,13 @@ public class JRecApp extends Application {
     private StackPane previewStage() {
         preview = new ScreenPreview();
 
-        HBox pills = modePills();
-        StackPane.setAlignment(pills, Pos.TOP_RIGHT);
-        StackPane.setMargin(pills, new Insets(10));
-
-        HBox deck = deck();
-        StackPane.setAlignment(deck, Pos.BOTTOM_CENTER);
-
-        StackPane stagePane = new StackPane(preview, pills, deck);
+        StackPane stagePane = new StackPane(preview);
         stagePane.getStyleClass().add("stage");
         stagePane.setMinHeight(0);
         return stagePane;
     }
 
-    private HBox modePills() {
+    private HBox modeSwitch() {
         modeGroup = new ToggleGroup();
         fullScreenToggle = new ToggleButton("全屏");
         fullScreenToggle.getStyleClass().add("pill");
@@ -371,10 +398,11 @@ public class JRecApp extends Application {
             updateRegionUi();
         });
 
-        HBox pills = new HBox(8, fullScreenToggle, regionToggle);
-        pills.setAlignment(Pos.CENTER_RIGHT);
-        pills.setMaxHeight(Region.USE_PREF_SIZE);
-        return pills;
+        HBox segment = new HBox(0, fullScreenToggle, regionToggle);
+        segment.getStyleClass().add("segmented");
+        segment.setAlignment(Pos.CENTER_LEFT);
+        segment.setMaxHeight(Region.USE_PREF_SIZE);
+        return segment;
     }
 
     /** The transport bar: one round key, a readout, and the way into settings. */
@@ -383,14 +411,14 @@ public class JRecApp extends Application {
         recordButton.getStyleClass().add("rec-circle");
         recordButton.setOnAction(e -> startRecording());
 
+        // The label lives inside the button now, so the key reads as one object at any
+        // size. A bare circle with text beside it made the circle look like a dial that
+        // belonged to nothing.
         deckLabel = new Label("开始录制");
         deckLabel.getStyleClass().add("deck-label");
-
-        deckSpec = new Label();
-        deckSpec.getStyleClass().add("deck-spec");
-
-        VBox texts = new VBox(3, deckLabel, deckSpec);
-        texts.setAlignment(Pos.CENTER_LEFT);
+        HBox recordContent = new HBox(9, new Circle(4, Color.WHITE), deckLabel);
+        recordContent.setAlignment(Pos.CENTER);
+        recordButton.setGraphic(recordContent);
 
         pickRegionButton = new Button("重新框选");
         pickRegionButton.getStyleClass().add("btn-ghost");
@@ -411,11 +439,7 @@ public class JRecApp extends Application {
         keyHint.setVisible(false);
         keyHint.setManaged(false);
 
-        Button settings = new Button("设置");
-        settings.getStyleClass().add("btn-ghost");
-        settings.setOnAction(e -> settingsDialog.showAndWait());
-
-        HBox bar = new HBox(14, recordButton, texts, spacer, pickRegionButton, keyHint, settings);
+        HBox bar = new HBox(12, recordButton, keyHint, spacer, pickRegionButton);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("deck");
         bar.setMaxWidth(Double.MAX_VALUE);
@@ -669,6 +693,11 @@ public class JRecApp extends Application {
     }
 
     private void updateDeckHint() {
+        if (recStopHint != null) {
+            recStopHint.setText(hotkeyBound && hotkeySpec != null
+                    ? "或按 " + hotkeySpec.label() + " 停止"
+                    : "");
+        }
         if (keyHint == null) {
             return;
         }
@@ -705,19 +734,21 @@ public class JRecApp extends Application {
         scroll.setMinHeight(0);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        VBox box = new VBox(6, head, scroll);
-        box.setMinHeight(96);
-        box.setPrefHeight(146);
-        box.setMaxHeight(200);
+        VBox box = new VBox(4, head, scroll);
+        box.setMinHeight(72);
+        box.setMaxHeight(240);
+        box.setPadding(new Insets(18, 2, 0, 2));
         return box;
     }
 
     private VBox buildRecordingView() {
-        recDot = new Circle(4, Color.web("#FF5A22"));
+        recDot = new Circle(5, Color.web("#E2400F"));
         Label pill = new Label("REC");
-        pill.getStyleClass().add("rec-pill");
-        HBox pillRow = new HBox(8, recDot, pill);
+        pill.getStyleClass().add("rec-pill-text");
+        HBox pillRow = new HBox(7, recDot, pill);
+        pillRow.getStyleClass().add("rec-pill");
         pillRow.setAlignment(Pos.CENTER);
+        pillRow.setMaxWidth(Region.USE_PREF_SIZE);
 
         timerLabel = new Label("00:00");
         timerLabel.getStyleClass().add("timer");
@@ -745,7 +776,11 @@ public class JRecApp extends Application {
         stop.setMaxWidth(Double.MAX_VALUE);
         stop.setOnAction(e -> stopRecording());
 
-        VBox card = new VBox(15, pillRow, timerLabel, meter, recordingCaption, recordingFileLabel, stop);
+        recStopHint = new Label();
+        recStopHint.getStyleClass().add("field-note");
+
+        VBox card = new VBox(14, pillRow, timerLabel, meter, recordingCaption,
+                recordingFileLabel, stop, recStopHint);
         card.getStyleClass().add("rec-card");
         card.setAlignment(Pos.CENTER);
         // A recorder's stop panel should not stretch across the whole window.
@@ -1265,8 +1300,11 @@ public class JRecApp extends Application {
         }
         List<Path> files = listRecordings(dir);
         if (files.isEmpty()) {
-            Label empty = new Label("还没有录制文件");
-            empty.getStyleClass().add("file-meta");
+            // An empty list is the first thing a new user sees, so it teaches the two ways
+            // to start instead of stating the obvious.
+            String key = hotkeySpec != null && hotkeyBound ? "按 " + hotkeySpec.label() + "，" : "";
+            Label empty = new Label(key + "或点「开始录制」，录完的文件会出现在这里");
+            empty.getStyleClass().add("history-empty");
             historyBox.getChildren().add(empty);
             return;
         }
