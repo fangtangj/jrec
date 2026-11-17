@@ -25,6 +25,10 @@
 
 ![录制中](docs/screenshot-recording.png)
 
+框选区域（离屏渲染，背景的桌面内容不在快照里，所以是灰的）：
+
+![框选区域](docs/screenshot-region.png)
+
 ## 快速开始
 
 需要 **JDK 17+** 和 **Maven 3.8+**，不需要预装 FFmpeg。
@@ -91,6 +95,7 @@ Windows 11 + JDK 17 + FFmpeg 6.0（gyan.dev essentials 构建）：
 | 视频 + 麦克风混录 | 通过，AAC 48kHz 立体声，音轨存在 |
 | 中文/括号设备名（`麦克风 (ToDesk Virtual Audio)`） | 通过 |
 | stdin 发 `q` 优雅停止 | 通过，exit code 0，文件可播放 |
+| 框选遮罩拖动选区 | 通过，200,150 → 900,600 得到 `700x450@200,150` |
 | UI 全流程（点开始→录→点停止→保存→列表出现） | 通过，产物 1.3 MB |
 | 单元测试 + 实拍测试 | `mvn test` 共 15 项全绿 |
 
@@ -130,10 +135,11 @@ Windows 不默认开放系统声音的录制通道。需要满足其中一条：
 
 ## 开发工具
 
-`jrec-desktop/src/main/java/com/rzx/jrec/desktop/dev/` 下有两个不参与产品逻辑的工具：
+`jrec-desktop/src/main/java/com/rzx/jrec/desktop/dev/` 下有三个不参与产品逻辑的工具：
 
 - `UiSnapshot`：把窗口离屏渲染成 PNG，用来生成 README 里的截图，不依赖桌面状态。
 - `UiFlowProbe`：驱动真实界面走完一次「开始→录 4 秒→停止→保存」，用来验证 UI 接线（监听器、视图切换、计时器、历史刷新），并顺带产出录制态截图。
+- `UiRegionProbe`：向框选遮罩合成鼠标事件，验证拖动选区能产出正确的坐标与尺寸（实测 200,150 → 900,600 得到 `700x450@200,150`）。
 
 运行方式（需 JavaFX 在 module path 上）：
 
