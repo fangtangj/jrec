@@ -165,7 +165,7 @@ public class JRecApp extends Application {
         this.stage = primaryStage;
         buildUi();
 
-        Scene scene = new Scene(root, 660, 430);
+        Scene scene = new Scene(root, 660, 520);
         scene.getStylesheets().add(getClass().getResource("/com/rzx/jrec/desktop/style.css").toExternalForm());
         stage.setScene(scene);
 
@@ -177,7 +177,7 @@ public class JRecApp extends Application {
         probeFfmpegAsync();
         stage.setTitle("JRec — 屏幕录制");
         stage.setMinWidth(620);
-        stage.setMinHeight(400);
+        stage.setMinHeight(470);
         stage.setOnCloseRequest(e -> {
             if (recorder.isRecording()) {
                 e.consume();
